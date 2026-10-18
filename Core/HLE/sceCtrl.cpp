@@ -375,6 +375,18 @@ void StvGrabadoraTrasCarga() {
 // La misma grabadora por adb, para el banco: `setprop debug.stv.grab grabar:N|reproducir:N|detener[:etiqueta]`
 // (N = ranura contando desde 1, como en el menu; cambiar la etiqueta repite la orden). Se lee una vez por
 // segundo de pared desde el vblank, FUERA de ctrlMutex (el latch lo tiene tomado y StvGrabadoraCargar lo toma).
+// La prop sobrevive al proceso: la orden que ya estaba al arrancar el juego es de la sesion anterior (medido:
+// relanzar el juego re-ejecutaba el ultimo "reproducir"). __CtrlInit la toma como vista. Tomarla en la primera
+// lectura del vblank no servia: si el arranque tarda (crear 304 pipelines de la cache), una orden nueva mandada
+// antes de la primera lectura quedaba tragada (medido en f203).
+static std::string stvGrabPrevio;
+
+void StvGrabadoraTomarOrdenVieja() {
+	char v[PROP_VALUE_MAX] = {0};
+	__system_property_get("debug.stv.grab", v);
+	stvGrabPrevio = v;
+}
+
 static void StvGrabadoraPoll() {
 	static double ultimo = 0.0;
 	const double ahora = time_now_d();
@@ -384,18 +396,9 @@ static void StvGrabadoraPoll() {
 	char v[PROP_VALUE_MAX] = {0};
 	if (__system_property_get("debug.stv.grab", v) <= 0 || v[0] == 0)
 		return;
-	static std::string previo;
-	static bool primera = true;
-	if (primera) {
-		// La prop sobrevive al proceso: la orden que ya estaba al arrancar es de la sesion anterior
-		// (medido: relanzar el juego re-ejecutaba el ultimo "reproducir"). Se toma como vista.
-		primera = false;
-		previo = v;
+	if (stvGrabPrevio == v)
 		return;
-	}
-	if (previo == v)
-		return;
-	previo = v;
+	stvGrabPrevio = v;
 	const std::string orden(v);
 	const std::string prefijo = SaveState::GetGamePrefix(g_paramSFO);
 	int ranura = 0;
@@ -704,6 +707,7 @@ static void __CtrlTimerUpdate(u64 userdata, int cyclesLate)
 }
 
 void __CtrlInit() {
+	StvGrabadoraTomarOrdenVieja();   // STV_GRABADORA_v1
 	ctrlTimer = CoreTiming::RegisterEvent("CtrlSampleTimer", __CtrlTimerUpdate);
 
 	ctrlIdleReset = -1;

@@ -78,6 +78,7 @@ bool StvGrabadoraDetener();
 int StvGrabadoraEstado();   // 0 nada, 1 grabando (o armada), 2 reproduciendo (o armada)
 void StvGrabadoraTrasCarga();
 void StvGrabadoraVblank();
+void StvGrabadoraTomarOrdenVieja();
 void __CtrlDoState(PointerWrap &p);
 void __CtrlShutdown();
 void __CtrlVblank();
