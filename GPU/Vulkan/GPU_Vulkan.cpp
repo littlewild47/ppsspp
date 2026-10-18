@@ -175,7 +175,7 @@ void GPU_Vulkan::SaveCache(const Path &filename) {
 	// guarda.
 	const int stvPipelines = pipelineManager_->GetNumPipelines();
 	if (stvPipelines < stvPipelinesEnDisco_) {
-		WARN_LOG(Log::G3D, "STVSHADER: no se guarda la cache (%d pipelines en memoria, %d en disco)", stvPipelines, stvPipelinesEnDisco_);
+		ERROR_LOG(Log::G3D, "STVSHADER: no se guarda la cache (%d pipelines en memoria, %d en disco)", stvPipelines, stvPipelinesEnDisco_);
 		return;
 	}
 
@@ -186,7 +186,7 @@ void GPU_Vulkan::SaveCache(const Path &filename) {
 	// WARNING: See comment in LoadCache if you are tempted to flip the second parameter to true.
 	pipelineManager_->SavePipelineCache(f, false, shaderManagerVulkan_, draw_);
 	INFO_LOG(Log::G3D, "Saved Vulkan pipeline cache");
-	WARN_LOG(Log::G3D, "STVSHADER: cache guardada (%d pipelines; antes %d en disco)", stvPipelines, stvPipelinesEnDisco_);
+	ERROR_LOG(Log::G3D, "STVSHADER: cache guardada (%d pipelines; antes %d en disco)", stvPipelines, stvPipelinesEnDisco_);
 	stvPipelinesEnDisco_ = stvPipelines;
 	fclose(f);
 }
