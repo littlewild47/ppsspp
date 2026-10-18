@@ -35,6 +35,7 @@
 #include "Common/TimeUtil.h"
 #include "Core/HLE/sceCtrl.h"
 #include "Core/SaveState.h"
+#include "Core/ELF/ParamSFO.h"
 #include "Core/MemMap.h"
 #include "Core/MIPS/MIPS.h"
 #include <atomic>
@@ -371,8 +372,39 @@ void StvGrabadoraTrasCarga() {
 	}
 }
 
+// La misma grabadora por adb, para el banco: `setprop debug.stv.grab grabar:N|reproducir:N|detener[:etiqueta]`
+// (N = ranura contando desde 1, como en el menu; cambiar la etiqueta repite la orden). Se lee una vez por
+// segundo de pared desde el vblank, FUERA de ctrlMutex (el latch lo tiene tomado y StvGrabadoraCargar lo toma).
+static void StvGrabadoraPoll() {
+	static double ultimo = 0.0;
+	const double ahora = time_now_d();
+	if (ahora - ultimo < 1.0)
+		return;
+	ultimo = ahora;
+	char v[PROP_VALUE_MAX] = {0};
+	if (__system_property_get("debug.stv.grab", v) <= 0 || v[0] == 0)
+		return;
+	static std::string previo;
+	if (previo == v)
+		return;
+	previo = v;
+	const std::string orden(v);
+	const std::string prefijo = SaveState::GetGamePrefix(g_paramSFO);
+	int ranura = 0;
+	if (orden.rfind("grabar:", 0) == 0 && (ranura = atoi(orden.c_str() + 7)) >= 1) {
+		StvGrabadoraGrabar(prefijo, ranura - 1);
+	} else if (orden.rfind("reproducir:", 0) == 0 && (ranura = atoi(orden.c_str() + 11)) >= 1) {
+		StvGrabadoraReproducir(prefijo, ranura - 1);
+	} else if (orden.rfind("detener", 0) == 0) {
+		StvGrabadoraDetener();
+	} else {
+		ERROR_LOG(Log::sceCtrl, "STVGRAB: orden desconocida '%s'", v);
+	}
+}
+
 // Desde hleEnterVblank. Huella: FNV-1a de una palabra cada 256 bytes de la RAM del PSP (~0,1 ms).
 void StvGrabadoraVblank() {
+	StvGrabadoraPoll();
 	const int modo = stvGrabModo.load();
 	if (modo != STVGRAB_GRABANDO && modo != STVGRAB_REPRODUCIENDO)
 		return;
