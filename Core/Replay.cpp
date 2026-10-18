@@ -330,6 +330,38 @@ void ReplayAbort() {
 	diskFailed = false;
 }
 
+// STV_GRABADORA_v1: ver Replay.h. El origen va DENTRO de la grabacion (sus dos primeros items), asi
+// que reproducirla desde la misma ranura cae en los mismos instantes del reloj del emulador que la
+// toma original: al cargar una ranura el reloj vuelve al valor guardado en ella. Los sticks del
+// origen van centrados (128) y no en 0: ReplayAbort deja lastAnalog en 0, que en el PSP es el stick
+// a fondo arriba a la izquierda (el defecto que ya corregia StvReplayReproducirDesplazado).
+void StvReplayBeginSaveAt(uint64_t t0) {
+	ReplayAbort();
+	replayState = ReplayState::SAVE;
+	uint8_t centro[2][2] = { { 128, 128 }, { 128, 128 } };
+	replayItems.push_back(ReplayItem(ReplayItemHeader(ReplayAction::BUTTONS, t0, (uint32_t)0)));
+	replayItems.push_back(ReplayItem(ReplayItemHeader(ReplayAction::ANALOG, t0, centro)));
+	lastButtons = 0;
+	memcpy(lastAnalog, centro, sizeof(lastAnalog));
+}
+
+bool StvReplayExecuteFileAt(const Path &filename, uint64_t t0) {
+	if (!ReplayExecuteFile(filename) || replayItems.empty())
+		return false;
+	const uint64_t origen = replayItems[0].info.timestamp;
+	for (auto &item : replayItems)
+		item.info.timestamp = t0 + (item.info.timestamp - origen);
+	return true;
+}
+
+bool StvReplayTerminado() {
+	return replayState == ReplayState::EXECUTE && replayCtrlPos >= replayItems.size();
+}
+
+size_t StvReplayItems() {
+	return replayItems.size();
+}
+
 bool ReplayIsExecuting() {
 	return replayState == ReplayState::EXECUTE;
 }

@@ -35,6 +35,7 @@
 #include "Common/TimeUtil.h"
 
 #include "Core/SaveState.h"
+#include "Core/HLE/sceCtrl.h"
 #include "GPU/Common/StvGeThread.h"  // STV_GE_THREAD_v1
 #include "Core/Config.h"
 #include "Core/Core.h"
@@ -859,6 +860,8 @@ int g_screenshotFailures;
 					callbackResult = TriggerLoadWarnings(callbackMessage);
 					hasLoadedState = true;
 					Core_ResetException();
+					// STV_GRABADORA_v1: una grabacion armada arranca justo aca, con el reloj de la ranura.
+					StvGrabadoraTrasCarga();
 
 					if (!slot_prefix.empty())
 						callbackMessage = slot_prefix + callbackMessage;

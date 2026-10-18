@@ -46,6 +46,7 @@
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceDisplay.h"
+#include "Core/HLE/sceCtrl.h"
 #include "Core/MIPS/StvDestinoSalto.h"
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceNet.h"
@@ -614,6 +615,7 @@ void hleEnterVblank(u64 userdata, int cyclesLate) {
 	// terminaciones del cuadro queden agendadas antes de despertar al juego.
 	stvge::PorVblank();
 	StvVpsPorVblank();
+	StvGrabadoraVblank();   // STV_GRABADORA_v1
 	{   // STV: volcado de los contadores de framebuffer, 1/s, por prop
 		static int cnt = 0;
 		if (++cnt >= 60) {

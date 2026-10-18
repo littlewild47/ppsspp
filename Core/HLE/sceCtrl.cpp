@@ -34,6 +34,10 @@
 #include <sys/system_properties.h>
 #include "Common/TimeUtil.h"
 #include "Core/HLE/sceCtrl.h"
+#include "Core/SaveState.h"
+#include "Core/MemMap.h"
+#include "Core/MIPS/MIPS.h"
+#include <atomic>
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceKernelThread.h"
 #include "Core/HLE/sceKernelInterrupt.h"
@@ -263,6 +267,131 @@ static void StvReplayPoll() {
 	}
 }
 
+// STV_GRABADORA_v1 (2026-10-18): GRABAR Y REPRODUCIR UNA JUGADA DESDE UNA RANURA.
+// Lo de arriba (debug.stv.replay) arranca cuando llega la orden, que se lee una vez por segundo de
+// reloj de pared: cada reproduccion caia unos cuadros corrida respecto de la partida y la pelea
+// divergia (medido el 2026-08-30: 58-69 % de pixeles distintos entre corridas). Aca grabar y
+// reproducir arrancan EN la carga de la ranura: el reloj del emulador vuelve al valor guardado y la
+// grabacion lleva su origen adentro (StvReplayBeginSaveAt), asi que cada boton cae en el mismo
+// instante emulado que en la toma.
+// La grabacion vive al lado de la ranura: <juego>_<ranura>.stvrec en PPSSPP_STATE.
+// Testigo de exactitud: con una grabacion activa, cada 60 vblanks sale por logcat una huella de la
+// RAM del PSP (STVGRAB: ... h=). Dos reproducciones identicas dan las mismas huellas linea a linea;
+// la primera distinta dice en que segundo divergieron.
+enum { STVGRAB_NADA = 0, STVGRAB_ARMADO_GRABAR, STVGRAB_GRABANDO, STVGRAB_ARMADO_REPRO, STVGRAB_REPRODUCIENDO };
+static std::atomic<int> stvGrabModo{ STVGRAB_NADA };
+static Path stvGrabRuta;
+static u32 stvGrabVblanks = 0;
+static char stvGrabLetra = '-';
+
+Path StvGrabadoraRuta(const std::string &prefijo, int ranura) {
+	return SaveState::GenerateSaveSlotPath(prefijo, ranura, "stvrec");
+}
+
+static void StvGrabadoraCargar(const std::string &prefijo, int ranura, int armado) {
+	std::lock_guard<std::mutex> guard(ctrlMutex);
+	ReplayAbort();
+	stvGrabRuta = StvGrabadoraRuta(prefijo, ranura);
+	stvGrabModo = armado;
+	ERROR_LOG(Log::sceCtrl, "STVGRAB: armado %s ranura %d (%s)", armado == STVGRAB_ARMADO_GRABAR ? "grabar" : "reproducir",
+		ranura, stvGrabRuta.c_str());
+	SaveState::LoadSlot(prefijo, ranura, [](SaveState::Status status, std::string_view msg) {
+		if (status == SaveState::Status::FAILURE) {
+			stvGrabModo = STVGRAB_NADA;
+			ERROR_LOG(Log::sceCtrl, "STVGRAB: la ranura no cargo; nada armado");
+		}
+	});
+}
+
+void StvGrabadoraGrabar(const std::string &prefijo, int ranura) {
+	StvGrabadoraCargar(prefijo, ranura, STVGRAB_ARMADO_GRABAR);
+}
+
+void StvGrabadoraReproducir(const std::string &prefijo, int ranura) {
+	StvGrabadoraCargar(prefijo, ranura, STVGRAB_ARMADO_REPRO);
+}
+
+bool StvGrabadoraDetener() {
+	std::lock_guard<std::mutex> guard(ctrlMutex);
+	bool ok = true;
+	if (stvGrabModo == STVGRAB_GRABANDO) {
+		const size_t n = StvReplayItems();
+		ok = ReplayFlushFile(stvGrabRuta);
+		ERROR_LOG(Log::sceCtrl, ok ? "STVGRAB: guardada %s (%zu eventos, %u vblanks)" : "STVGRAB: FALLO el guardado de %s (%zu eventos, %u vblanks)",
+			stvGrabRuta.c_str(), n, stvGrabVblanks);
+	} else if (stvGrabModo == STVGRAB_REPRODUCIENDO) {
+		ERROR_LOG(Log::sceCtrl, "STVGRAB: reproduccion detenida a mano (%u vblanks)", stvGrabVblanks);
+	}
+	ReplayAbort();
+	stvGrabModo = STVGRAB_NADA;
+	return ok;
+}
+
+int StvGrabadoraEstado() {
+	switch (stvGrabModo.load()) {
+	case STVGRAB_ARMADO_GRABAR: case STVGRAB_GRABANDO: return 1;
+	case STVGRAB_ARMADO_REPRO: case STVGRAB_REPRODUCIENDO: return 2;
+	default: return 0;
+	}
+}
+
+// Desde SaveState::Process, en el hilo del emulador, con la ranura recien cargada.
+void StvGrabadoraTrasCarga() {
+	std::lock_guard<std::mutex> guard(ctrlMutex);
+	const u64 t0 = CoreTiming::GetGlobalTimeUs();
+	switch (stvGrabModo.load()) {
+	case STVGRAB_ARMADO_GRABAR:
+		StvReplayBeginSaveAt(t0);
+		stvGrabModo = STVGRAB_GRABANDO;
+		stvGrabVblanks = 0;
+		stvGrabLetra = 'g';
+		ERROR_LOG(Log::sceCtrl, "STVGRAB: GRABANDO desde t0=%llu", (unsigned long long)t0);
+		break;
+	case STVGRAB_ARMADO_REPRO:
+		if (StvReplayExecuteFileAt(stvGrabRuta, t0)) {
+			stvGrabModo = STVGRAB_REPRODUCIENDO;
+			stvGrabVblanks = 0;
+			stvGrabLetra = 'r';
+			ERROR_LOG(Log::sceCtrl, "STVGRAB: REPRODUCIENDO %s desde t0=%llu (%zu eventos)", stvGrabRuta.c_str(),
+				(unsigned long long)t0, StvReplayItems());
+		} else {
+			stvGrabModo = STVGRAB_NADA;
+			ERROR_LOG(Log::sceCtrl, "STVGRAB: NO se pudo leer %s", stvGrabRuta.c_str());
+		}
+		break;
+	case STVGRAB_GRABANDO:
+	case STVGRAB_REPRODUCIENDO:
+		// Otra carga en medio de una grabacion: la toma ya no parte de su ranura.
+		ReplayAbort();
+		stvGrabModo = STVGRAB_NADA;
+		ERROR_LOG(Log::sceCtrl, "STVGRAB: cancelada por otra carga de ranura (no se guardo nada)");
+		break;
+	default:
+		break;
+	}
+}
+
+// Desde hleEnterVblank. Huella: FNV-1a de una palabra cada 256 bytes de la RAM del PSP (~0,1 ms).
+void StvGrabadoraVblank() {
+	const int modo = stvGrabModo.load();
+	if (modo != STVGRAB_GRABANDO && modo != STVGRAB_REPRODUCIENDO)
+		return;
+	++stvGrabVblanks;
+	if (stvGrabVblanks % 60 != 0)
+		return;
+	u32 h = 2166136261u;
+	const u8 *base = Memory::GetPointerUnchecked(PSP_GetKernelMemoryBase());
+	const u32 tam = Memory::g_MemorySize;
+	for (u32 i = 0; i + 4 <= tam; i += 256) {
+		u32 w;
+		memcpy(&w, base + i, 4);
+		h = (h ^ w) * 16777619u;
+	}
+	h = (h ^ currentMIPS->pc) * 16777619u;
+	ERROR_LOG(Log::sceCtrl, "STVGRAB: %c v=%u t=%llu h=%08x", stvGrabLetra, stvGrabVblanks,
+		(unsigned long long)CoreTiming::GetGlobalTimeUs(), h);
+}
+
 static void __CtrlUpdateLatch()
 {
 	std::lock_guard<std::mutex> guard(ctrlMutex);
@@ -293,6 +422,12 @@ static void __CtrlUpdateLatch()
 	// Se relee 1 vez por segundo: cero costo en el camino caliente.
 	StvReplayPoll();
 	ReplayApplyCtrl(buttons, ctrlCurrent.analog, t);
+	// STV_GRABADORA_v1: al aplicar el ultimo evento, la reproduccion devuelve el mando.
+	if (stvGrabModo == STVGRAB_REPRODUCIENDO && StvReplayTerminado()) {
+		ERROR_LOG(Log::sceCtrl, "STVGRAB: fin de la reproduccion (%u vblanks); el mando vuelve al jugador", stvGrabVblanks);
+		ReplayAbort();
+		stvGrabModo = STVGRAB_NADA;
+	}
 
 	// Copy in the current data to the current buffer.
 	ctrlBufs[ctrlBuf] = ctrlCurrent;

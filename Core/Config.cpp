@@ -975,6 +975,7 @@ static const ConfigSetting controlSettings[] = {
 	// STV_CONTROLES_v1: globales (NO por juego): deciden como se tratan los mapeos por juego.
 	ConfigSetting("STVControlesGlobales", SETTING(g_Config, bStvControlesGlobales), true, CfgFlag::DEFAULT),
 	ConfigSetting("STVMenuFijo", SETTING(g_Config, bStvMenuFijo), true, CfgFlag::DEFAULT),
+	ConfigSetting("STVGrabadora", SETTING(g_Config, bStvGrabadora), false, CfgFlag::DEFAULT),   // STV_GRABADORA_v1
 	
 #if defined(USING_WIN_UI)
 	ConfigSetting("IgnoreWindowsKey", SETTING(g_Config, bIgnoreWindowsKey), false, CfgFlag::PER_GAME),

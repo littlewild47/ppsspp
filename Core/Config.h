@@ -494,6 +494,8 @@ public:
 	// de un juego va al general) y menus de PPSSPP con botones fijos (A acepta, B vuelve), sin depender del mapeo.
 	bool bStvControlesGlobales = true;
 	bool bStvMenuFijo = true;
+	// STV_GRABADORA_v1 (2026-10-18): muestra en el menu de pausa grabar y reproducir una jugada desde la ranura.
+	bool bStvGrabadora = false;
 
 	// Disable diagonals
 	bool bDisableDpadDiagonals;

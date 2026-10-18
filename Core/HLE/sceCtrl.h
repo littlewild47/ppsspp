@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <string>
 #include "Common/CommonTypes.h"
 
 class PointerWrap;
@@ -67,6 +68,16 @@ const int CTRL_STICK_RIGHT = 1;
 #define CTRL_MASK_USER    (CTRL_MASK_DPAD | CTRL_MASK_ACTION | CTRL_START | CTRL_SELECT | CTRL_MASK_TRIGGER | CTRL_HOME | CTRL_HOLD | CTRL_WLAN | CTRL_REMOTE_HOLD | CTRL_VOL_UP | CTRL_VOL_DOWN | CTRL_SCREEN | CTRL_NOTE | CTRL_L2 | CTRL_L3 | CTRL_R2 | CTRL_R3)
 
 void __CtrlInit();
+
+// STV_GRABADORA_v1: grabar y reproducir una jugada anclada a la carga de una ranura (ver sceCtrl.cpp).
+class Path;
+Path StvGrabadoraRuta(const std::string &prefijo, int ranura);
+void StvGrabadoraGrabar(const std::string &prefijo, int ranura);
+void StvGrabadoraReproducir(const std::string &prefijo, int ranura);
+bool StvGrabadoraDetener();
+int StvGrabadoraEstado();   // 0 nada, 1 grabando (o armada), 2 reproduciendo (o armada)
+void StvGrabadoraTrasCarga();
+void StvGrabadoraVblank();
 void __CtrlDoState(PointerWrap &p);
 void __CtrlShutdown();
 void __CtrlVblank();

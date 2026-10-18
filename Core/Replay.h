@@ -73,6 +73,17 @@ bool ReplayIsExecuting();
 bool ReplayIsSaving();
 
 void ReplayApplyCtrl(uint32_t &buttons, uint8_t analog[2][2], uint64_t t);
+
+// STV_GRABADORA_v1 (2026-10-18): grabacion anclada a la carga de una ranura.
+// Empieza a grabar con un origen explicito t0 (el reloj del emulador justo despues de cargar):
+// el primer item de la grabacion es BUTTONS=0 en t0 y el segundo, los dos sticks centrados en t0.
+void StvReplayBeginSaveAt(uint64_t t0);
+// Carga una grabacion y la ejecuta con su origen (el timestamp del primer item) movido a t0.
+bool StvReplayExecuteFileAt(const Path &filename, uint64_t t0);
+// true cuando la ejecucion ya aplico todos sus items de mando.
+bool StvReplayTerminado();
+// Cuantos items tiene la grabacion en memoria (para los avisos).
+size_t StvReplayItems();
 uint32_t ReplayApplyDisk(ReplayAction action, uint32_t result, uint64_t t);
 uint64_t ReplayApplyDisk64(ReplayAction action, uint64_t result, uint64_t t);
 uint32_t ReplayApplyDiskRead(void *data, uint32_t readSize, uint32_t dataSize, bool inGameDir, uint64_t t);

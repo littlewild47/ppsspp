@@ -30,6 +30,7 @@
 #include "Common/Data/Text/I18n.h"
 #include "Common/Data/Text/Parsers.h"
 #include "Common/StringUtils.h"
+#include "Common/File/FileUtil.h"
 #include "Common/System/OSD.h"
 #include "Common/System/Request.h"
 #include "Common/VR/PPSSPPVR.h"
@@ -39,6 +40,7 @@
 #include "Core/Reporting.h"
 #include "Core/Dialog/PSPSaveDialog.h"
 #include "Core/SaveState.h"
+#include "Core/HLE/sceCtrl.h"
 #include "Core/System.h"
 #include "Core/Core.h"
 #include "Core/Config.h"
@@ -676,6 +678,36 @@ void GamePauseScreen::CreateViews() {
 		rightColumnItems->Add(new Choice(pa->T("Cheats"), ImageID("I_CHEAT")))->OnClick.Add([this](UI::EventParams &e) {
 			screenManager()->push(new CwCheatScreen(gamePath_));
 		});
+	}
+
+	// STV_GRABADORA_v1: grabar y reproducir una jugada desde la ranura elegida (ver Core/HLE/sceCtrl.cpp).
+	if (g_Config.bStvGrabadora && PSP_CoreParameter().fileType != IdentifiedFileType::PPSSPP_GE_DUMP) {
+		const int ranura = g_Config.iCurrentStateSlot;
+		const int estado = StvGrabadoraEstado();
+		if (estado == 1) {
+			rightColumnItems->Add(new Choice("Detener y guardar la grabacion", ImageID("I_FILE_SAVE")))->OnClick.Add([this](UI::EventParams &) {
+				StvGrabadoraDetener();
+				RecreateViews();
+			});
+		} else if (estado == 2) {
+			rightColumnItems->Add(new Choice("Detener la reproduccion", ImageID("I_PAUSE_LINE")))->OnClick.Add([this](UI::EventParams &) {
+				StvGrabadoraDetener();
+				RecreateViews();
+			});
+		} else {
+			Choice *grabar = rightColumnItems->Add(new Choice(StringFromFormat("Grabar jugada desde la ranura %d", ranura + 1), ImageID("I_FILE_SAVE")));
+			grabar->SetEnabled(SaveState::HasSaveInSlot(saveStatePrefix_, ranura));
+			grabar->OnClick.Add([this, ranura](UI::EventParams &) {
+				StvGrabadoraGrabar(saveStatePrefix_, ranura);
+				TriggerFinish(DR_CANCEL);
+			});
+			Choice *repro = rightColumnItems->Add(new Choice(StringFromFormat("Reproducir jugada de la ranura %d", ranura + 1), ImageID("I_PLAY")));
+			repro->SetEnabled(SaveState::HasSaveInSlot(saveStatePrefix_, ranura) && File::Exists(StvGrabadoraRuta(saveStatePrefix_, ranura)));
+			repro->OnClick.Add([this, ranura](UI::EventParams &) {
+				StvGrabadoraReproducir(saveStatePrefix_, ranura);
+				TriggerFinish(DR_CANCEL);
+			});
+		}
 	}
 
 	// TODO, also might be nice to show overall compat rating here?
