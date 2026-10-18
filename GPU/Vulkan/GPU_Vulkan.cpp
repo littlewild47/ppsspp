@@ -151,6 +151,7 @@ void GPU_Vulkan::LoadCache(const Path &filename) {
 		File::Delete(filename);
 	} else {
 		INFO_LOG(Log::G3D, "Loaded Vulkan pipeline cache.");
+		stvPipelinesEnDisco_ = pipelineManager_->GetNumPipelines();   // STV_SHADERCACHE_GUARDA_v1
 	}
 }
 
@@ -166,6 +167,18 @@ void GPU_Vulkan::SaveCache(const Path &filename) {
 		return;
 	}
 
+	// STV_SHADERCACHE_GUARDA_v1 (2026-10-18): al volver del segundo plano (DeviceRestore) los shaders y
+	// pipelines arrancan vacios y se recompilan recien al usarse; guardar despues (otro HOME, o salir) pisaba
+	// el archivo con lo poco usado desde la vuelta. Medido en la consola: HOME + volver + "Salir al menu"
+	// llevo la cache de GoS de 12.348 a 1.472 bytes (y otra vez quedo en 32), y la sesion siguiente
+	// compilaba en pleno juego: tirones. Regla: la cache solo crece; con menos pipelines que en disco no se
+	// guarda.
+	const int stvPipelines = pipelineManager_->GetNumPipelines();
+	if (stvPipelines < stvPipelinesEnDisco_) {
+		WARN_LOG(Log::G3D, "STVSHADER: no se guarda la cache (%d pipelines en memoria, %d en disco)", stvPipelines, stvPipelinesEnDisco_);
+		return;
+	}
+
 	FILE *f = File::OpenCFile(filename, "wb");
 	if (!f)
 		return;
@@ -173,6 +186,8 @@ void GPU_Vulkan::SaveCache(const Path &filename) {
 	// WARNING: See comment in LoadCache if you are tempted to flip the second parameter to true.
 	pipelineManager_->SavePipelineCache(f, false, shaderManagerVulkan_, draw_);
 	INFO_LOG(Log::G3D, "Saved Vulkan pipeline cache");
+	WARN_LOG(Log::G3D, "STVSHADER: cache guardada (%d pipelines; antes %d en disco)", stvPipelines, stvPipelinesEnDisco_);
+	stvPipelinesEnDisco_ = stvPipelines;
 	fclose(f);
 }
 

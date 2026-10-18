@@ -83,4 +83,6 @@ private:
 	PipelineManagerVulkan *pipelineManager_;
 
 	Path shaderCachePath_;
+	// STV_SHADERCACHE_GUARDA_v1: pipelines que tiene el archivo en disco (lo cargado o lo ultimo guardado).
+	int stvPipelinesEnDisco_ = 0;
 };
