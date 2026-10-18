@@ -385,6 +385,14 @@ static void StvGrabadoraPoll() {
 	if (__system_property_get("debug.stv.grab", v) <= 0 || v[0] == 0)
 		return;
 	static std::string previo;
+	static bool primera = true;
+	if (primera) {
+		// La prop sobrevive al proceso: la orden que ya estaba al arrancar es de la sesion anterior
+		// (medido: relanzar el juego re-ejecutaba el ultimo "reproducir"). Se toma como vista.
+		primera = false;
+		previo = v;
+		return;
+	}
 	if (previo == v)
 		return;
 	previo = v;

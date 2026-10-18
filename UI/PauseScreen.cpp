@@ -685,12 +685,12 @@ void GamePauseScreen::CreateViews() {
 		const int ranura = g_Config.iCurrentStateSlot;
 		const int estado = StvGrabadoraEstado();
 		if (estado == 1) {
-			rightColumnItems->Add(new Choice("Detener y guardar la grabacion", ImageID("I_FILE_SAVE")))->OnClick.Add([this](UI::EventParams &) {
+			rightColumnItems->Add(new Choice("Detener y guardar la grabación", ImageID("I_FILE_SAVE")))->OnClick.Add([this](UI::EventParams &) {
 				StvGrabadoraDetener();
 				RecreateViews();
 			});
 		} else if (estado == 2) {
-			rightColumnItems->Add(new Choice("Detener la reproduccion", ImageID("I_PAUSE_LINE")))->OnClick.Add([this](UI::EventParams &) {
+			rightColumnItems->Add(new Choice("Detener la reproducción", ImageID("I_PAUSE_LINE")))->OnClick.Add([this](UI::EventParams &) {
 				StvGrabadoraDetener();
 				RecreateViews();
 			});
