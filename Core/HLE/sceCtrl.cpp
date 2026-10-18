@@ -295,7 +295,7 @@ static void StvGrabadoraCargar(const std::string &prefijo, int ranura, int armad
 	stvGrabRuta = StvGrabadoraRuta(prefijo, ranura);
 	stvGrabModo = armado;
 	ERROR_LOG(Log::sceCtrl, "STVGRAB: armado %s ranura %d (%s)", armado == STVGRAB_ARMADO_GRABAR ? "grabar" : "reproducir",
-		ranura, stvGrabRuta.c_str());
+		ranura + 1, stvGrabRuta.c_str());
 	SaveState::LoadSlot(prefijo, ranura, [](SaveState::Status status, std::string_view msg) {
 		if (status == SaveState::Status::FAILURE) {
 			stvGrabModo = STVGRAB_NADA;
