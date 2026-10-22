@@ -321,7 +321,6 @@ static VkAttachmentStoreOp ConvertStoreAction(VKRRenderPassStoreAction action) {
 	switch (action) {
 	case VKRRenderPassStoreAction::STORE:     return VK_ATTACHMENT_STORE_OP_STORE;
 	case VKRRenderPassStoreAction::DONT_CARE: return VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	case VKRRenderPassStoreAction::NONE:      return VK_ATTACHMENT_STORE_OP_NONE_EXT;  // STV_ZSOLOLECTURA_v1
 	}
 	return VK_ATTACHMENT_STORE_OP_DONT_CARE;  // avoid compiler warning
 }

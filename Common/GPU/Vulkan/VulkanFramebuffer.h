@@ -162,7 +162,6 @@ enum class VKRRenderPassLoadAction : uint8_t {
 enum class VKRRenderPassStoreAction : uint8_t {
 	STORE,  // default. avoid when possible.
 	DONT_CARE,
-	NONE,  // STV_ZSOLOLECTURA_v1: VK_ATTACHMENT_STORE_OP_NONE_EXT (no se escribe y el contenido se conserva)
 };
 
 struct RPKey {

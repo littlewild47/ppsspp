@@ -267,7 +267,6 @@ struct VulkanExtensions {
 	bool EXT_swapchain_colorspace;
 	bool ARM_rasterization_order_attachment_access;
 	bool EXT_image_compression_control = false;   // STV
-	bool EXT_load_store_op_none = false;   // STV_ZSOLOLECTURA_v1
 	bool EXT_fragment_shader_interlock;
 	bool KHR_present_id;  // Should probably check the feature flags instead.
 	bool KHR_present_wait;  // Same
