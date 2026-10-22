@@ -1215,6 +1215,13 @@ void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, Vir
 			return;
 	}
 
+	// STV_ZCOPIA_IMAGEN_v1 (arco Colin McRae): debug.stv.cmr.zmodo=1 copia el depth con vkCmdCopyImage (sin shader,
+	// sin gl_FragDepth ni test tardio; el pase destino lo CARGA) en vez de dibujarlo. Mismo resultado (24 bits).
+	static int stvZModo = -1;
+	if (stvZModo < 0) stvZModo = StvPropDef("debug.stv.cmr.zmodo", 0);
+	if (stvZModo == 1 && useCopy && src->renderWidth == dst->renderWidth && src->renderHeight == dst->renderHeight)
+		useRaster = false;
+
 	// Some GPUs can copy depth but only if stencil gets to come along for the ride. We only want to use this if there is no blit functionality.
 	if (useRaster) {
 		BlitUsingRaster(src->fbo, 0, 0, w, h, dst->fbo, 0, 0, w, h, false, dst->renderScaleFactor, Get2DPipeline(Draw2DShader::DRAW2D_COPY_DEPTH), "BlitDepthRaster");
