@@ -652,8 +652,14 @@ u32 GPUCommonHW::CheckGPUFeatures() const {
 	}
 
 	// Some backends will turn this off again in the calling function.
-	if (g_Config.bUberShaderFragment) {
-		features |= GPU_USE_FRAGMENT_UBERSHADER;
+	// STV_SINUBERFRAG_v1 (arco Colin McRae): en los juegos de la lista StvSinUberFrag (compat.ini) los shaders de
+	// fragmentos son especializados: -1,7 % de GPU en Colin McRae (difieren del ubershader solo por redondeo, <8/255).
+	// Prop debug.stv.cmr.uberfrag (0/1) pisa la lista y el ini.
+	{
+		const int prop = StvPropDef("debug.stv.cmr.uberfrag", -1);
+		const bool uber = prop >= 0 ? prop == 1 : (g_Config.bUberShaderFragment && !PSP_CoreParameter().compat.flags().StvSinUberFrag);
+		if (uber)
+			features |= GPU_USE_FRAGMENT_UBERSHADER;
 	}
 
 	return features;

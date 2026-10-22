@@ -70,6 +70,7 @@ struct CompatFlags {
 	bool ClearMeshIgnoresAlpha;   // STV: el clear por malla de triangulos puede pisar el alpha (el juego no lo usa)
 	bool StvZCompartido;   // STV_ZCOMPARTIDO_v1: framebuffers con el mismo depth de la PSP comparten la imagen de depth
 	bool StvPrimerOpaco;   // STV_DCLOAD_FIJO_v1: el primer draw opaco que cubre el pase evita cargar el color viejo
+	bool StvSinUberFrag;   // STV_SINUBERFRAG_v1: shaders de fragmentos especializados (sin ubershader)
 	bool FramerateHack30;
 	bool JitInvalidationHack;
 	bool HideISOFiles;
