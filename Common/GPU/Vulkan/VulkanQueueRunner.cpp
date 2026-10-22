@@ -894,7 +894,8 @@ void VulkanQueueRunner::ApplyRenderPassMerge(std::vector<VKRStep *> &steps) {
 				case VKRStepType::RENDER:
 					// STV_ZCOMPARTIDO_v1: un pase sobre otro framebuffer que comparte el depth de fb lo lee o lo
 					// escribe: mover un pase de fb por encima de el cambiaria el orden de los accesos al depth.
-					if (steps[j]->render.framebuffer != fb && steps[j]->render.framebuffer->StvZCompartidoCon(fb))
+					// (render.framebuffer es nullptr en los pases al backbuffer.)
+					if (steps[j]->render.framebuffer && steps[j]->render.framebuffer != fb && steps[j]->render.framebuffer->StvZCompartidoCon(fb))
 						goto done_fb;
 					if (steps[j]->render.framebuffer == fb) {
 						// Prevent Unknown's example case from https://github.com/hrydgard/ppsspp/pull/12242
