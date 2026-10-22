@@ -42,6 +42,7 @@
 #include "Common/StvProp.h"
 #include "Common/File/FileUtil.h"  // STV_VOLDUMP_v1
 #include "Core/Config.h"
+#include "Core/System.h"  // STV_CLEARZ_v1: PSP_CoreParameter().compat
 #include <cstring>
 #include "Common/TimeUtil.h"
 #include <cmath>
@@ -1296,7 +1297,13 @@ void DrawEngineVulkan::Flush() {
 
 		// Non-zero depth clears are unusual, but some drivers don't match drawn depth values to cleared values.
 		// Games sometimes expect exact matches (see #12626, for example) for equal comparisons.
-		if (result.action == SW_CLEAR && everUsedEqualDepth_ && gstate.isClearModeDepthMask() && result.depth > 0.0f && result.depth < 1.0f)
+		// STV_CLEARZ_v1 (arco Colin McRae): en los juegos de la lista StvClearZReal (compat.ini) el clear sigue siendo
+		// clear: se convierte en loadOp CLEAR y el pase no precarga el depth (en la Mali, un sombreador a pantalla
+		// completa con test tardio). Prop debug.stv.cmr.clearz (0/1) pisa la lista.
+		static int stvClearZ = -2;
+		if (stvClearZ == -2) stvClearZ = StvPropDef("debug.stv.cmr.clearz", -1);
+		const bool stvClearZReal = stvClearZ >= 0 ? stvClearZ == 1 : PSP_CoreParameter().compat.flags().StvClearZReal;
+		if (result.action == SW_CLEAR && everUsedEqualDepth_ && gstate.isClearModeDepthMask() && result.depth > 0.0f && result.depth < 1.0f && !stvClearZReal)
 			result.action = SW_NOT_READY;
 
 		if (result.action == SW_NOT_READY) {

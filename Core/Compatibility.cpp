@@ -109,6 +109,8 @@ void Compatibility::CheckSettings(IniFile &iniFile, const std::string &gameID) {
 	CheckSetting(iniFile, gameID, "ForceMax60FPS", &flags_.ForceMax60FPS);
 	CheckSetting(iniFile, gameID, "GoWFramerateHack60", &flags_.GoWFramerateHack60);
 	CheckSetting(iniFile, gameID, "ClearMeshIgnoresAlpha", &flags_.ClearMeshIgnoresAlpha);
+	CheckSetting(iniFile, gameID, "StvZCompartido", &flags_.StvZCompartido);  // STV_ZCOMPARTIDO_v1
+	CheckSetting(iniFile, gameID, "StvClearZReal", &flags_.StvClearZReal);    // STV_CLEARZ_v1
 	CheckSetting(iniFile, gameID, "FramerateHack30", &flags_.FramerateHack30);
 	CheckSetting(iniFile, gameID, "JitInvalidationHack", &flags_.JitInvalidationHack);
 	CheckSetting(iniFile, gameID, "HideISOFiles", &flags_.HideISOFiles);

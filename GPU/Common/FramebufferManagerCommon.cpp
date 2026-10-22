@@ -2322,7 +2322,7 @@ stvFbEscalaHecha:
 	Draw::Framebuffer *stvZDe = nullptr;
 	{
 		const int prop = StvPropDef("debug.stv.zcomp", -1);
-		const bool activo = prop >= 0 ? prop == 1 : g_Config.bStvZCompartido;
+		const bool activo = prop >= 0 ? prop == 1 : (g_Config.bStvZCompartido || PSP_CoreParameter().compat.flags().StvZCompartido);
 		if (activo && msaaLevel_ == 0 && GetFramebufferLayers() == 1 && vfb->z_address != 0 && vfb->z_stride != 0) {
 			for (auto v : vfbs_) {
 				if (v != vfb && v->fbo && v->z_address == vfb->z_address && v->z_stride == vfb->z_stride &&
