@@ -1511,6 +1511,13 @@ bool FramebufferManagerCommon::BindFramebufferAsColorTexture(int stage, VirtualF
 	bool skipCopy = !(flags & BINDFBCOLOR_MAY_COPY);
 
 	// Currently rendering to this framebuffer. Need to make a copy.
+	// STV_CMR_DIAG_v1 (INSTRUMENTO, rompe la imagen): debug.stv.cmr.sinauto=1 saltea los draws que se texturizan con su
+	// propio destino (en Colin McRae, el desenfoque de lo lejano): mide cuanto cuesta el efecto con su corte de pase.
+	if (!skipCopy && framebuffer == currentRenderVfb_ && StvPropInt("debug.stv.cmr.sinauto") == 1) {
+		draw_->BindTexture(stage, nullptr);
+		gstate_c.skipDrawReason |= SKIPDRAW_BAD_FB_TEXTURE;
+		return false;
+	}
 	if (!skipCopy && framebuffer == currentRenderVfb_) {
 		// Self-texturing, need a copy currently (some backends can potentially support it though).
 		WARN_LOG_ONCE(selfTextureCopy, Log::G3D, "Attempting to texture from current render target (src=%08x / target=%08x / flags=%d), making a copy", framebuffer->fb_address, currentRenderVfb_->fb_address, flags);
@@ -2255,7 +2262,13 @@ void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w,
 		if (esc > 0 && !g_Config.sStvFbsReducidos.empty()) {
 			char dir[16];
 			snprintf(dir, sizeof(dir), "%08x", vfb->fb_address | 0x04000000);
-			if (g_Config.sStvFbsReducidos.find(dir) != std::string::npos) {
+			// STV_FBESCALA_v1: una entrada "dir/ancho" (ej. 040cc000/256) elige ademas el ancho del buffer: Colin McRae
+			// usa la misma direccion para el buffer de luz (480) y el del destello del sol (256).
+			char dirAncho[24];
+			snprintf(dirAncho, sizeof(dirAncho), "%s/%d", dir, (int)vfb->width);
+			const size_t pDir = g_Config.sStvFbsReducidos.find(dir);
+			const bool conAncho = pDir != std::string::npos && pDir + 8 < g_Config.sStvFbsReducidos.size() && g_Config.sStvFbsReducidos[pDir + 8] == '/';
+			if (pDir != std::string::npos && (!conAncho || g_Config.sStvFbsReducidos.find(dirAncho) != std::string::npos)) {
 				const float f = esc / 100.0f;
 				if (f < renderScaleFactor_ && !force1x) {
 					vfb->renderScaleFactor = f;
