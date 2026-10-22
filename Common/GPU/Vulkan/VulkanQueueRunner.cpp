@@ -325,17 +325,32 @@ void VulkanQueueRunner::PreprocessSteps(std::vector<VKRStep *> &steps) {
 	{
 		static int stvDc = -1;
 		if (stvDc < 0) { stvDc = StvPropInt("debug.stv.dcload"); STV_LOG("STVDCLOAD: modo=%d", stvDc); }
-		if (stvDc >= 1) {
+		// STV_DCLOAD_FIJO_v1: el motor de dibujo marca stvOpacoAplicar (prop debug.stv.dcload=2 o juegos de la lista
+		// StvPrimerOpaco del compat.ini): 1 = el draw escribe tambien el alfa (DONT_CARE exacto), 2 = no escribe el
+		// alfa (CLEAR a 0: valor definido; solo en juegos donde ese alfa es 0 y nadie lo lee distinto).
+		for (int i = 0; i < (int)steps.size(); i++) {
+			VKRStep *st = steps[i];
+			if (st->stepType != VKRStepType::RENDER || !st->render.stvOpacoFull || !st->render.stvOpacoAplicar || st->render.colorLoad != VKRRenderPassLoadAction::KEEP) continue;
+			const VkRect2D &ra = st->render.renderArea; const int *r = st->render.stvOpacoRect;
+			if (!(r[0] <= ra.offset.x && r[1] <= ra.offset.y && r[2] >= ra.offset.x + (int)ra.extent.width && r[3] >= ra.offset.y + (int)ra.extent.height)) continue;
+			if (st->render.stvOpacoAplicar == 1) {
+				st->render.colorLoad = VKRRenderPassLoadAction::DONT_CARE;
+			} else {
+				st->render.colorLoad = VKRRenderPassLoadAction::CLEAR;
+				st->render.clearColor = 0;
+			}
+		}
+		if (stvDc == 1) {
 			static int nCand = 0, nAplic = 0, nPasos = 0, cad = 0;
 			for (int i = 0; i < (int)steps.size(); i++) {
 				if (steps[i]->stepType != VKRStepType::RENDER || !steps[i]->render.framebuffer) continue;
 				nPasos++;
-				if (steps[i]->render.stvOpacoFull && steps[i]->render.colorLoad == VKRRenderPassLoadAction::KEEP) {
+				if (steps[i]->render.stvOpacoFull) {
 					const VkRect2D &ra = steps[i]->render.renderArea; const int *r = steps[i]->render.stvOpacoRect;
 					bool cubre = r[0] <= ra.offset.x && r[1] <= ra.offset.y && r[2] >= ra.offset.x + (int)ra.extent.width && r[3] >= ra.offset.y + (int)ra.extent.height;
 					if (cubre) {
 						nCand++;
-						if (stvDc >= 2) { steps[i]->render.colorLoad = VKRRenderPassLoadAction::DONT_CARE; nAplic++; }
+						if (steps[i]->render.colorLoad != VKRRenderPassLoadAction::KEEP) nAplic++;
 					}
 				}
 			}

@@ -342,9 +342,10 @@ public:
 	void StvPrimerDraw(const char *desc) {
 		if (StvPasoSinDraws() && !curRenderStep_->render.stvPrimero[0]) { strncpy(curRenderStep_->render.stvPrimero, desc, sizeof(curRenderStep_->render.stvPrimero) - 1); curRenderStep_->render.stvPrimero[sizeof(curRenderStep_->render.stvPrimero) - 1] = 0; }
 	}
-	void StvPrimerDrawOpaco(int x1, int y1, int x2, int y2) {
+	void StvPrimerDrawOpaco(int x1, int y1, int x2, int y2, int aplicar = 0) {
 		if (StvPasoSinDraws()) {
 			curRenderStep_->render.stvOpacoFull = true;
+			curRenderStep_->render.stvOpacoAplicar = (uint8_t)aplicar;
 			curRenderStep_->render.stvOpacoRect[0] = x1; curRenderStep_->render.stvOpacoRect[1] = y1;
 			curRenderStep_->render.stvOpacoRect[2] = x2; curRenderStep_->render.stvOpacoRect[3] = y2;
 		}

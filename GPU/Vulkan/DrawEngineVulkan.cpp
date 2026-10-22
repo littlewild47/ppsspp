@@ -42,6 +42,8 @@
 #include "Common/StvProp.h"
 #include "Common/File/FileUtil.h"  // STV_VOLDUMP_v1
 #include "Core/Config.h"
+#include "GPU/Common/GPUStateUtils.h"  // STV_DCLOAD_FIJO_v1
+#include "Core/System.h"  // STV_DCLOAD_FIJO_v1: PSP_CoreParameter().compat
 #include <cstring>
 #include "Common/TimeUtil.h"
 #include <cmath>
@@ -1428,8 +1430,11 @@ void DrawEngineVulkan::Flush() {
 				}
 			}
 			{
-				static int stvDc = -1;
-				if (stvDc < 0) stvDc = StvPropInt("debug.stv.dcload");
+				static int stvDc = -2;
+				if (stvDc == -2) {
+					stvDc = StvPropDef("debug.stv.dcload", -1);
+					if (stvDc < 0) stvDc = PSP_CoreParameter().compat.flags().StvPrimerOpaco ? 3 : 0;  // 3 = por la lista del compat.ini
+				}
 				if (stvDc >= 1 && result.stvCubre && !gstate.isModeClear() && renderManager->StvPasoSinDraws()) {
 					// STV_DCLOAD_FIJO_v1 (arco Colin McRae): el blend fijo src*1 + dst*0 (FIXA ffffff, FIXB 000000, suma)
 					// es un reemplazo exacto: cuenta como opaco (Colin McRae llena asi su buffer de luz).
@@ -1444,7 +1449,11 @@ void DrawEngineVulkan::Flush() {
 						&& (!gstate.isDepthTestEnabled() || gstate.getDepthTestFunction() == GE_COMP_ALWAYS)
 						&& (!gstate.isStencilTestEnabled() || gstate.getStencilTestFunction() == GE_COMP_ALWAYS);
 					if (opaco) {
-						renderManager->StvPrimerDrawOpaco(stvRx1 + 1, stvRy1 + 1, stvRx2 - 1, stvRy2 - 1);
+						// STV_DCLOAD_FIJO_v1: si el draw escribe el alfa (stencil de la PSP) el color viejo no hace falta
+						// (DONT_CARE); si no lo escribe, solo con la lista del compat.ini o dcload>=2 (CLEAR a 0).
+						const bool escribeAlfa = !IsStencilTestOutputDisabled() && ReplaceAlphaWithStencilType() != STENCIL_VALUE_KEEP;
+						const int aplicar = stvDc >= 2 ? (escribeAlfa ? 1 : 2) : 0;
+						renderManager->StvPrimerDrawOpaco(stvRx1 + 1, stvRy1 + 1, stvRx2 - 1, stvRy2 - 1, aplicar);
 					}
 				}
 			}
