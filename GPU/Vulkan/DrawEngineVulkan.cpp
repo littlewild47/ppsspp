@@ -1438,7 +1438,12 @@ void DrawEngineVulkan::Flush() {
 				static int stvDc = -1;
 				if (stvDc < 0) stvDc = StvPropInt("debug.stv.dcload");
 				if (stvDc >= 1 && result.stvCubre && !gstate.isModeClear() && renderManager->StvPasoSinDraws()) {
-					bool opaco = !gstate.isAlphaBlendEnabled()
+					// STV_DCLOAD_FIJO_v1 (arco Colin McRae): el blend fijo src*1 + dst*0 (FIXA ffffff, FIXB 000000, suma)
+					// es un reemplazo exacto: cuenta como opaco (Colin McRae llena asi su buffer de luz).
+					const bool stvBlendReemplazo = gstate.isAlphaBlendEnabled() && gstate.getBlendEq() == GE_BLENDMODE_MUL_AND_ADD &&
+						gstate.getBlendFuncA() == GE_SRCBLEND_FIXA && gstate.getFixA() == 0xFFFFFF &&
+						gstate.getBlendFuncB() == GE_DSTBLEND_FIXB && gstate.getFixB() == 0x000000;
+					bool opaco = (!gstate.isAlphaBlendEnabled() || stvBlendReemplazo)
 						&& (!gstate.isAlphaTestEnabled() || gstate.getAlphaTestFunction() == GE_COMP_ALWAYS)
 						&& !gstate.isColorTestEnabled()
 						&& gstate.getColorMask() == 0
