@@ -1192,7 +1192,7 @@ void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, Vir
 	static int stvZSalteadas = 0;
 	const bool stvMismoZ = src->stvZVer != 0 && src->stvZVer == dst->stvZVer && w == src->renderWidth && h == src->renderHeight &&
 		src->renderWidth == dst->renderWidth && src->renderHeight == dst->renderHeight;
-	if (stvZVerModo >= 1 && stvMismoZ) {
+	if (stvZVerModo >= 1 && stvMismoZ && StvAbActivo()) {  // con debug.stv.abgate=1, solo en la fase B del A/B por marca
 		stvZSalteadas++;
 		return;
 	}
@@ -1219,7 +1219,7 @@ void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, Vir
 	// sin gl_FragDepth ni test tardio; el pase destino lo CARGA) en vez de dibujarlo. Mismo resultado (24 bits).
 	static int stvZModo = -1;
 	if (stvZModo < 0) stvZModo = StvPropDef("debug.stv.cmr.zmodo", 0);
-	if (stvZModo == 1 && useCopy && src->renderWidth == dst->renderWidth && src->renderHeight == dst->renderHeight)
+	if (stvZModo == 1 && useCopy && src->renderWidth == dst->renderWidth && src->renderHeight == dst->renderHeight && StvAbActivo())
 		useRaster = false;
 
 	// Some GPUs can copy depth but only if stencil gets to come along for the ride. We only want to use this if there is no blit functionality.
