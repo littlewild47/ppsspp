@@ -71,7 +71,14 @@ public:
 	VkSampleCountFlagBits sampleCount;
 
 	VKRImage color{};  // color.image is always there.
-	VKRImage depth{};  // depth.image is allowed to be VK_NULL_HANDLE.
+	// STV_ZCOMPARTIDO_v1 (arco Colin McRae): el depth propio se llama depthPropio y TODO acceso pasa por Z(), que
+	// devuelve el propio o el de otro framebuffer cuando lo comparten (mismo Z de la PSP: una sola imagen, un solo
+	// layout seguido por el QueueRunner). El dueño lo mantiene vivo el VKFramebuffer de thin3d (referencia).
+	VKRImage depthPropio{};  // depthPropio.image is allowed to be VK_NULL_HANDLE.
+	VKRImage &Z() { return *zp_; }
+	const VKRImage &Z() const { return *zp_; }
+	void StvCompartirZ(VKRFramebuffer *dueno) { zp_ = dueno->zp_; }
+	bool StvZCompartidoCon(const VKRFramebuffer *o) const { return o && o != this && zp_->image != VK_NULL_HANDLE && zp_->image == o->zp_->image; }
 
 	// These are only initialized and used if numSamples > 1.
 	VKRImage msaaColor{};
@@ -84,7 +91,7 @@ public:
 	void UpdateTag(const char *newTag);
 
 	bool HasDepth() const {
-		return depth.image != VK_NULL_HANDLE;
+		return Z().image != VK_NULL_HANDLE;
 	}
 
 	// STV_AUTOTEX_ALTERNA_v1: union de lo escrito en el color desde la ultima limpieza (pixeles).
@@ -128,6 +135,7 @@ private:
 
 	VulkanContext *vulkan_;
 	std::string tag_;
+	VKRImage *zp_ = &depthPropio;  // STV_ZCOMPARTIDO_v1
 };
 
 inline bool RenderPassTypeHasDepth(RenderPassType type) {

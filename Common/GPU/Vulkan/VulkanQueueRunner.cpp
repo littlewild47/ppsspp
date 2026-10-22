@@ -280,7 +280,7 @@ void VulkanQueueRunner::PreprocessSteps(std::vector<VKRStep *> &steps) {
 			for (int i = 0; i < (int)steps.size(); i++) {
 				if (steps[i]->stepType != VKRStepType::RENDER || !steps[i]->render.framebuffer) continue;
 				VKRFramebuffer *fb = steps[i]->render.framebuffer;
-				if (!fb->depth.image) continue;
+				if (!fb->Z().image) continue;
 				conDepth++;
 				bool tocado = false;
 				for (int j = i + 1; j < (int)steps.size() && !tocado; j++) {
@@ -877,6 +877,10 @@ void VulkanQueueRunner::ApplyRenderPassMerge(std::vector<VKRStep *> &steps) {
 				}
 				switch (steps[j]->stepType) {
 				case VKRStepType::RENDER:
+					// STV_ZCOMPARTIDO_v1: un pase sobre otro framebuffer que comparte el depth de fb lo lee o lo
+					// escribe: mover un pase de fb por encima de el cambiaria el orden de los accesos al depth.
+					if (steps[j]->render.framebuffer != fb && steps[j]->render.framebuffer->StvZCompartidoCon(fb))
+						goto done_fb;
 					if (steps[j]->render.framebuffer == fb) {
 						// Prevent Unknown's example case from https://github.com/hrydgard/ppsspp/pull/12242
 						if (renderHasClear(steps[j]) || steps[j]->dependencies.contains(touchedFramebuffers)) {
@@ -891,14 +895,14 @@ void VulkanQueueRunner::ApplyRenderPassMerge(std::vector<VKRStep *> &steps) {
 					}
 					break;
 				case VKRStepType::COPY:
-					if (steps[j]->copy.dst == fb) {
+					if (steps[j]->copy.dst == fb || (steps[j]->copy.dst && steps[j]->copy.dst->StvZCompartidoCon(fb))) {  // STV_ZCOMPARTIDO_v1
 						// Without framebuffer "renaming", we can't merge past a clobbered fb.
 						goto done_fb;
 					}
 					touchedFramebuffers.insert(steps[j]->copy.dst);
 					break;
 				case VKRStepType::BLIT:
-					if (steps[j]->blit.dst == fb) {
+					if (steps[j]->blit.dst == fb || (steps[j]->blit.dst && steps[j]->blit.dst->StvZCompartidoCon(fb))) {  // STV_ZCOMPARTIDO_v1
 						// Without framebuffer "renaming", we can't merge past a clobbered fb.
 						goto done_fb;
 					}
@@ -1097,9 +1101,9 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 				&iter.fb->color,
 				iter.targetLayout
 			);
-		} else if (iter.fb->depth.image != VK_NULL_HANDLE && (iter.aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) && iter.fb->depth.layout != iter.targetLayout) {
+		} else if (iter.fb->Z().image != VK_NULL_HANDLE && (iter.aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) && iter.fb->Z().layout != iter.targetLayout) {
 			recordBarrier_.TransitionDepthStencilImageAuto(
-				&iter.fb->depth,
+				&iter.fb->Z(),
 				iter.targetLayout
 			);
 		}
@@ -1138,9 +1142,9 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
 			);
 		}
-		if (step.render.framebuffer->depth.image != VK_NULL_HANDLE && step.render.framebuffer->depth.layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+		if (step.render.framebuffer->Z().image != VK_NULL_HANDLE && step.render.framebuffer->Z().layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
 			recordBarrier_.TransitionImage(
-				step.render.framebuffer->depth.image,
+				step.render.framebuffer->Z().image,
 				0,
 				1,
 				step.render.framebuffer->numLayers,
@@ -1394,8 +1398,8 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 		if (step.render.finalColorLayout != fb->color.layout) {
 			recordBarrier_.TransitionColorImageAuto(&fb->color, step.render.finalColorLayout);
 		}
-		if (fb->depth.image && step.render.finalDepthStencilLayout != fb->depth.layout) {
-			recordBarrier_.TransitionDepthStencilImageAuto(&fb->depth, step.render.finalDepthStencilLayout);
+		if (fb->Z().image && step.render.finalDepthStencilLayout != fb->Z().layout) {
+			recordBarrier_.TransitionDepthStencilImageAuto(&fb->Z(), step.render.finalDepthStencilLayout);
 		}
 	}
 }
@@ -1452,8 +1456,8 @@ VKRRenderPass *VulkanQueueRunner::PerformBindFramebufferAsRenderTarget(const VKR
 		recordBarrier_.TransitionColorImageAuto(&fb->color, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
 		// If the render pass doesn't touch depth, we can avoid a layout transition of the depth buffer.
-		if (fb->depth.image && RenderPassTypeHasDepth(step.render.renderPassType)) {
-			recordBarrier_.TransitionDepthStencilImageAuto(&fb->depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		if (fb->Z().image && RenderPassTypeHasDepth(step.render.renderPassType)) {
+			recordBarrier_.TransitionDepthStencilImageAuto(&fb->Z(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 		}
 
 		// The transition from the optimal format happens after EndRenderPass, now that we don't
@@ -1545,15 +1549,15 @@ void VulkanQueueRunner::PerformCopy(const VKRStep &step, VkCommandBuffer cmd) {
 
 	// We can't copy only depth or only stencil unfortunately - or can we?.
 	if (step.copy.aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
-		_dbg_assert_(src->depth.image != VK_NULL_HANDLE);
-		recordBarrier_.TransitionDepthStencilImageAuto(&src->depth, srcTransferLayout);
+		_dbg_assert_(src->Z().image != VK_NULL_HANDLE);
+		recordBarrier_.TransitionDepthStencilImageAuto(&src->Z(), srcTransferLayout);
 		if (src != dst) {
-			if (dst->depth.layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-				recordBarrier_.TransitionDepthStencilImageAuto(&dst->depth, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			if (dst->Z().layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+				recordBarrier_.TransitionDepthStencilImageAuto(&dst->Z(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 			} else {
 				// Kingdom Hearts: Subsequent copies twice to the same depth buffer without any other use.
 				// Not super sure how that happens, but we need a barrier to pass sync validation.
-				SetupTransferDstWriteAfterWrite(dst->depth, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, &recordBarrier_);
+				SetupTransferDstWriteAfterWrite(dst->Z(), VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, &recordBarrier_);
 			}
 		}
 	}
@@ -1605,11 +1609,11 @@ void VulkanQueueRunner::PerformCopy(const VKRStep &step, VkCommandBuffer cmd) {
 		}
 	}
 	if (step.copy.aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
-		_dbg_assert_(src->depth.image != VK_NULL_HANDLE);
-		_dbg_assert_(dst->depth.image != VK_NULL_HANDLE);
+		_dbg_assert_(src->Z().image != VK_NULL_HANDLE);
+		_dbg_assert_(dst->Z().image != VK_NULL_HANDLE);
 		copy.srcSubresource.aspectMask = step.copy.aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 		copy.dstSubresource.aspectMask = step.copy.aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
-		vkCmdCopyImage(cmd, src->depth.image, src->depth.layout, dst->depth.image, dst->depth.layout, 1, &copy);
+		vkCmdCopyImage(cmd, src->Z().image, src->Z().layout, dst->Z().image, dst->Z().layout, 1, &copy);
 
 		if (multisampled) {
 			vkCmdCopyImage(cmd, src->msaaDepth.image, src->msaaDepth.layout, dst->msaaDepth.image, dst->msaaDepth.layout, 1, &copy);
@@ -1709,10 +1713,10 @@ void VulkanQueueRunner::PerformBlit(const VKRStep &step, VkCommandBuffer cmd) {
 
 	// We can't copy only depth or only stencil unfortunately.
 	if (step.blit.aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
-		_assert_(src->depth.image != VK_NULL_HANDLE);
-		_assert_(dst->depth.image != VK_NULL_HANDLE);
-		recordBarrier_.TransitionDepthStencilImageAuto(&src->depth, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		recordBarrier_.TransitionDepthStencilImageAuto(&dst->depth, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		_assert_(src->Z().image != VK_NULL_HANDLE);
+		_assert_(dst->Z().image != VK_NULL_HANDLE);
+		recordBarrier_.TransitionDepthStencilImageAuto(&src->Z(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		recordBarrier_.TransitionDepthStencilImageAuto(&dst->Z(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	}
 
 	recordBarrier_.Flush(cmd);
@@ -1756,7 +1760,7 @@ void VulkanQueueRunner::PerformBlit(const VKRStep &step, VkCommandBuffer cmd) {
 			blit.srcSubresource.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 			blit.dstSubresource.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 		}
-		vkCmdBlitImage(cmd, src->depth.image, src->depth.layout, dst->depth.image, dst->depth.layout, 1, &blit, step.blit.filter);
+		vkCmdBlitImage(cmd, src->Z().image, src->Z().layout, dst->Z().image, dst->Z().layout, 1, &blit, step.blit.filter);
 	}
 }
 
@@ -1840,7 +1844,7 @@ void VulkanQueueRunner::PerformReadback(const VKRStep &step, VkCommandBuffer cmd
 			srcImage = &step.readback.src->color;
 			recordBarrier_.TransitionColorImageAuto(srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 		} else if (step.readback.aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
-			srcImage = &step.readback.src->depth;
+			srcImage = &step.readback.src->Z();
 			recordBarrier_.TransitionDepthStencilImageAuto(srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 			_dbg_assert_(srcImage->image != VK_NULL_HANDLE);
 		} else {

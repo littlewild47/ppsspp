@@ -1301,7 +1301,7 @@ bool VulkanRenderManager::CopyFramebufferToMemory(VKRFramebuffer *src, VkImageAs
 		// Copies from stencil are always S8.
 		srcFormat = Draw::DataFormat::S8;
 	} else if (aspectBits & VK_IMAGE_ASPECT_DEPTH_BIT) {
-		switch (src->depth.format) {
+		switch (src->Z().format) {
 		case VK_FORMAT_D24_UNORM_S8_UINT: srcFormat = Draw::DataFormat::D24_S8; break;
 		case VK_FORMAT_D32_SFLOAT_S8_UINT: srcFormat = Draw::DataFormat::D32F; break;
 		case VK_FORMAT_D16_UNORM_S8_UINT: srcFormat = Draw::DataFormat::D16; break;
@@ -1553,10 +1553,10 @@ void VulkanRenderManager::BlitFramebuffer(VKRFramebuffer *src, VkRect2D srcRect,
 	// Sanity check. Added an assert to try to gather more info.
 	// Got this assert in NPJH50443 FINAL FANTASY TYPE-0, but pretty rare. Moving back to debug assert.
 	if (aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
-		_dbg_assert_msg_(src->depth.image != VK_NULL_HANDLE, "%s", src->Tag());
-		_dbg_assert_msg_(dst->depth.image != VK_NULL_HANDLE, "%s", dst->Tag());
+		_dbg_assert_msg_(src->Z().image != VK_NULL_HANDLE, "%s", src->Tag());
+		_dbg_assert_msg_(dst->Z().image != VK_NULL_HANDLE, "%s", dst->Tag());
 
-		if (!src->depth.image || !dst->depth.image) {
+		if (!src->Z().image || !dst->Z().image) {
 			// Something has gone wrong, but let's try to stumble along.
 			return;
 		}
@@ -1586,6 +1586,17 @@ VkImageView VulkanRenderManager::BindFramebufferAsTexture(VKRFramebuffer *fb, in
 
 	// We don't support texturing from stencil, neither do we support texturing from depth|stencil together (nonsensical).
 	_dbg_assert_(aspectBit == VK_IMAGE_ASPECT_COLOR_BIT || aspectBit == VK_IMAGE_ASPECT_DEPTH_BIT);
+
+	// STV_ZCOMPARTIDO_v1: testigo del unico caso que compartir el depth no cubre: samplear como textura un depth que
+	// es a la vez el adjunto del pase en curso (otro framebuffer con la misma imagen). No deberia pasar en los juegos
+	// donde se activa; si pasa, se ve en el log.
+	if (aspectBit == VK_IMAGE_ASPECT_DEPTH_BIT && curRenderStep_ && curRenderStep_->render.framebuffer && curRenderStep_->render.framebuffer->StvZCompartidoCon(fb)) {
+		static int avisos = 0;
+#if defined(__ANDROID__)
+		if (avisos++ < 5)
+			__android_log_print(ANDROID_LOG_ERROR, "STV", "STVZCOMP: AVISO se lee como textura el depth compartido de %s durante un pase de %s", fb->Tag(), curRenderStep_->render.framebuffer->Tag());
+#endif
+	}
 
 	// Mark the dependency, check for required transitions, and return the image.
 
@@ -1618,9 +1629,9 @@ VkImageView VulkanRenderManager::BindFramebufferAsTexture(VKRFramebuffer *fb, in
 	curRenderStep_->preTransitions.insert(rq);  // Note that insert avoids inserting duplicates.
 
 	if (layer == -1) {
-		return aspectBit == VK_IMAGE_ASPECT_COLOR_BIT ? fb->color.texAllLayersView : fb->depth.texAllLayersView;
+		return aspectBit == VK_IMAGE_ASPECT_COLOR_BIT ? fb->color.texAllLayersView : fb->Z().texAllLayersView;
 	} else {
-		return aspectBit == VK_IMAGE_ASPECT_COLOR_BIT ? fb->color.texLayerViews[layer] : fb->depth.texLayerViews[layer];
+		return aspectBit == VK_IMAGE_ASPECT_COLOR_BIT ? fb->color.texLayerViews[layer] : fb->Z().texLayerViews[layer];
 	}
 }
 

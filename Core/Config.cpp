@@ -730,6 +730,7 @@ static const ConfigSetting graphicsSettings[] = {
 	ConfigSetting("STVEscala", SETTING(g_Config, iStvEscala), 0, CfgFlag::PER_GAME),
 	ConfigSetting("STVFbsReducidos", SETTING(g_Config, sStvFbsReducidos), "", CfgFlag::PER_GAME),  // STV_FBESCALA_v1
 	ConfigSetting("STVFbsEscala", SETTING(g_Config, iStvFbsEscala), 100, CfgFlag::PER_GAME),
+	ConfigSetting("STVZCompartido", SETTING(g_Config, bStvZCompartido), false, CfgFlag::PER_GAME),  // STV_ZCOMPARTIDO_v1
 	ConfigSetting("STVWorkerGE", SETTING(g_Config, bStvWorkerGE), false, CfgFlag::PER_GAME),
 	ConfigSetting("AndroidHwScale", SETTING(g_Config, iAndroidHwScale), &DefaultAndroidHwScale, CfgFlag::DEFAULT),
 	ConfigSetting("HighQualityDepth", SETTING(g_Config, bHighQualityDepth), true, CfgFlag::PER_GAME | CfgFlag::REPORT),

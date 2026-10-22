@@ -766,9 +766,19 @@ void FramebufferManagerCommon::SetDepthFrameBuffer(bool isClearingDepth) {
 
 		// Technically, here we should copy away the depth buffer to another framebuffer that uses that z_address, or maybe
 		// even write it back to RAM. However, this is rare. Silent Hill is one example, see #16126.
+		// STV_ZCOMPARTIDO_v1: si compartia la imagen de depth con otro framebuffer, ya no corresponde: se recrea su fbo.
+		bool stvCompartia = false;
+		for (auto v : vfbs_) {
+			if (v != currentRenderVfb_ && v->fbo && currentRenderVfb_->fbo && draw_->StvZCompartido(v->fbo, currentRenderVfb_->fbo))
+				stvCompartia = true;
+		}
 		currentRenderVfb_->z_address = boundDepthBuffer;
 		// Update the stride in case it changed.
 		currentRenderVfb_->z_stride = boundDepthStride;
+		if (stvCompartia) {
+			ERROR_LOG(Log::FrameBuf, "STVZCOMP: %08x cambio de depth buffer: deja de compartir (fbo recreado)", currentRenderVfb_->fb_address);
+			ResizeFramebufFBO(currentRenderVfb_, currentRenderVfb_->width, currentRenderVfb_->height, true);
+		}
 
 		if (currentRenderVfb_->fbo) {
 			char tag[128];
@@ -1181,6 +1191,12 @@ void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, Vir
 
 	int w = std::min(src->renderWidth, dst->renderWidth);
 	int h = std::min(src->renderHeight, dst->renderHeight);
+
+	// STV_ZCOMPARTIDO_v1: la misma imagen de depth: copiarla sobre si misma no cambia nada (y seria un feedback loop).
+	if (draw_->StvZCompartido(src->fbo, dst->fbo)) {
+		dst->stvZVer = src->stvZVer;
+		return;
+	}
 
 	// STV_ZVERSION_v1 (arco Colin McRae, 2026-10-21): si el depth de dst ya ES el de src (misma version: dst lo
 	// recibio de src por una copia y ninguno de los dos se escribio desde entonces), la copia no cambia nada.
@@ -2287,7 +2303,33 @@ stvFbEscalaHecha:
 
 	gpuStats.numFBOsCreated++;
 
-	vfb->fbo = draw_->CreateFramebuffer({ vfb->renderWidth, vfb->renderHeight, 1, GetFramebufferLayers(), msaaLevel_, true, tag });
+	// STV_ZCOMPARTIDO_v1 (arco Colin McRae, 2026-10-21): si otro framebuffer del mismo tamaño de render usa el MISMO
+	// depth buffer de la PSP (direccion y stride), el nuevo comparte su imagen de depth: en la PSP es una sola memoria,
+	// y asi no hacen falta las copias de depth entre ellos (Colin McRae: A0, A1 y el buffer de luz B, todos con el Z
+	// en 0x088000; la copia A->B costaba ~1,7 ms por cuadro a 1271x720). Por juego (STVZCompartido) o prop.
+	Draw::Framebuffer *stvZDe = nullptr;
+	{
+		const int prop = StvPropDef("debug.stv.zcomp", -1);
+		const bool activo = prop >= 0 ? prop == 1 : g_Config.bStvZCompartido;
+		if (activo && msaaLevel_ == 0 && GetFramebufferLayers() == 1 && vfb->z_address != 0 && vfb->z_stride != 0) {
+			for (auto v : vfbs_) {
+				if (v != vfb && v->fbo && v->z_address == vfb->z_address && v->z_stride == vfb->z_stride &&
+					v->renderWidth == vfb->renderWidth && v->renderHeight == vfb->renderHeight) {
+					stvZDe = v->fbo;
+					static int avisos = 0;
+					if (avisos++ < 12)
+						ERROR_LOG(Log::FrameBuf, "STVZCOMP: %08x comparte el depth %08x de %08x (%dx%d)", vfb->fb_address, vfb->z_address, v->fb_address, vfb->renderWidth, vfb->renderHeight);
+					break;
+				}
+			}
+		}
+	}
+	Draw::FramebufferDesc stvDesc{ vfb->renderWidth, vfb->renderHeight, 1, GetFramebufferLayers(), msaaLevel_, true, tag };
+	stvDesc.stvZCompartir = stvZDe;
+	vfb->fbo = draw_->CreateFramebuffer(stvDesc);
+	// Si de verdad comparte, NO se limpia el depth al enlazarlo (es el del compañero) ni se le copia el viejo encima.
+	const bool stvComparte = stvZDe && vfb->fbo && draw_->StvZCompartido(vfb->fbo, stvZDe);
+	const Draw::RPAction stvZAccion = stvComparte ? Draw::RPAction::KEEP : Draw::RPAction::CLEAR;
 	if (Memory::IsVRAMAddress(vfb->fb_address) && vfb->fb_stride != 0) {
 		NotifyMemInfo(MemBlockFlags::ALLOC, vfb->fb_address, vfb->BufferByteSize(RASTER_COLOR), tag, len);
 	}
@@ -2299,18 +2341,18 @@ stvFbEscalaHecha:
 	if (old.fbo) {
 		INFO_LOG(Log::FrameBuf, "Resizing FBO for %08x : %dx%dx%s", vfb->fb_address, w, h, GeBufferFormatToString(vfb->fb_format));
 		if (vfb->fbo) {
-			draw_->BindFramebufferAsRenderTarget(vfb->fbo, { Draw::RPAction::CLEAR, Draw::RPAction::CLEAR, Draw::RPAction::CLEAR }, "ResizeFramebufFBO");
+			draw_->BindFramebufferAsRenderTarget(vfb->fbo, { Draw::RPAction::CLEAR, stvZAccion, stvZAccion }, "ResizeFramebufFBO");
 			if (!skipCopy) {
 				BlitFramebuffer(vfb, 0, 0, &old, 0, 0, std::min((u16)oldWidth, std::min(vfb->bufferWidth, vfb->width)), std::min((u16)oldHeight, std::min(vfb->height, vfb->bufferHeight)), 0, RASTER_COLOR, "BlitColor_ResizeFramebufFBO");
 			}
-			if (vfb->usageFlags & FB_USAGE_RENDER_DEPTH) {
+			if ((vfb->usageFlags & FB_USAGE_RENDER_DEPTH) && !stvComparte) {
 				BlitFramebuffer(vfb, 0, 0, &old, 0, 0, std::min((u16)oldWidth, std::min(vfb->bufferWidth, vfb->width)), std::min((u16)oldHeight, std::min(vfb->height, vfb->bufferHeight)), 0, RASTER_DEPTH, "BlitDepth_ResizeFramebufFBO");
 			}
 		}
 		fbosToDelete_.push_back(old.fbo);
 		draw_->BindFramebufferAsRenderTarget(vfb->fbo, { Draw::RPAction::KEEP, Draw::RPAction::KEEP, Draw::RPAction::KEEP }, "ResizeFramebufFBO");
 	} else {
-		draw_->BindFramebufferAsRenderTarget(vfb->fbo, { Draw::RPAction::CLEAR, Draw::RPAction::CLEAR, Draw::RPAction::CLEAR }, "ResizeFramebufFBO");
+		draw_->BindFramebufferAsRenderTarget(vfb->fbo, { Draw::RPAction::CLEAR, stvZAccion, stvZAccion }, "ResizeFramebufFBO");
 	}
 	DiscardFramebufferCopy();
 	currentRenderVfb_ = vfb;

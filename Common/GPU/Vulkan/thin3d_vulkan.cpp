@@ -561,6 +561,7 @@ public:
 	bool StvSucio(Framebuffer *fb, int r[4]) override;
 	void StvSucioLimpiar(Framebuffer *fb) override;
 	bool StvAliasParcial(Framebuffer *src, Framebuffer *dst, int r[4]) override;
+	bool StvZCompartido(Framebuffer *a, Framebuffer *b) override;  // STV_ZCOMPARTIDO_v1
 	void StvAliasSincronizado(Framebuffer *src, Framebuffer *dst) override;
 
 	void HandleEvent(Event ev, int width, int height, void *param1, void *param2) override;
@@ -1821,8 +1822,10 @@ public:
 			delete vfb;
 		}, buf_);
 		buf_ = nullptr;
+		if (stvZDueno_) { stvZDueno_->Release(); stvZDueno_ = nullptr; }  // STV_ZCOMPARTIDO_v1: despues de encolar el borrado propio
 	}
 	VKRFramebuffer *GetFB() const { return buf_; }
+	void StvRetenerZ(Framebuffer *dueno) { dueno->AddRef(); stvZDueno_ = dueno; }  // STV_ZCOMPARTIDO_v1
 	void UpdateTag(const char *newTag) override {
 		buf_->UpdateTag(newTag);
 	}
@@ -1831,6 +1834,7 @@ public:
 	}
 private:
 	VKRFramebuffer *buf_;
+	Framebuffer *stvZDueno_ = nullptr;  // STV_ZCOMPARTIDO_v1: dueño del depth que usamos (referencia)
 };
 
 Framebuffer *VKContext::CreateFramebuffer(const FramebufferDesc &desc) {
@@ -1839,8 +1843,19 @@ Framebuffer *VKContext::CreateFramebuffer(const FramebufferDesc &desc) {
 	_assert_(desc.width > 0);
 	_assert_(desc.height > 0);
 
-	VKRFramebuffer *vkrfb = new VKRFramebuffer(vulkan_, &renderManager_.PostInitBarrier(), desc.width, desc.height, desc.numLayers, desc.multiSampleLevel, desc.z_stencil, desc.tag);
-	return new VKFramebuffer(vkrfb, desc.multiSampleLevel);
+	// STV_ZCOMPARTIDO_v1: con desc.stvZCompartir (mismo tamaño, una capa, sin MSAA) el framebuffer nuevo no crea
+	// depth: usa la imagen del otro, al que retiene con una referencia hasta destruirse.
+	VKFramebuffer *zsrc = (VKFramebuffer *)desc.stvZCompartir;
+	const bool compartir = zsrc && desc.z_stencil && desc.multiSampleLevel == 0 && desc.numLayers == 1 && zsrc->GetFB()->HasDepth() &&
+		zsrc->GetFB()->width == desc.width && zsrc->GetFB()->height == desc.height && zsrc->GetFB()->numLayers == 1 &&
+		zsrc->GetFB()->sampleCount == VK_SAMPLE_COUNT_1_BIT;
+	VKRFramebuffer *vkrfb = new VKRFramebuffer(vulkan_, &renderManager_.PostInitBarrier(), desc.width, desc.height, desc.numLayers, desc.multiSampleLevel, desc.z_stencil && !compartir, desc.tag);
+	VKFramebuffer *fb = new VKFramebuffer(vkrfb, desc.multiSampleLevel);
+	if (compartir) {
+		vkrfb->StvCompartirZ(zsrc->GetFB());
+		fb->StvRetenerZ(zsrc);
+	}
+	return fb;
 }
 
 void VKContext::CopyFramebufferImage(Framebuffer *srcfb, int level, int x, int y, int z, Framebuffer *dstfb, int dstLevel, int dstX, int dstY, int dstZ, int width, int height, int depth, Aspect aspects, const char *tag) {
@@ -1973,6 +1988,10 @@ bool VKContext::StvSucio(Framebuffer *fb, int r[4]) {
 	if (!f || !f->stvSucioHay) return false;
 	for (int i = 0; i < 4; i++) r[i] = f->stvSucio[i];
 	return true;
+}
+
+bool VKContext::StvZCompartido(Framebuffer *a, Framebuffer *b) {  // STV_ZCOMPARTIDO_v1
+	return a && b && ((VKFramebuffer *)a)->GetFB()->StvZCompartidoCon(((VKFramebuffer *)b)->GetFB());
 }
 
 bool VKContext::StvAliasParcial(Framebuffer *src, Framebuffer *dst, int r[4]) {

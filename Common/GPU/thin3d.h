@@ -312,6 +312,7 @@ struct FramebufferDesc {
 	int multiSampleLevel;  // 0 = 1xaa, 1 = 2xaa, and so on.
 	bool z_stencil;
 	const char *tag;  // For graphics debuggers
+	Framebuffer *stvZCompartir = nullptr;  // STV_ZCOMPARTIDO_v1: usar el depth de este framebuffer (mismo tamaño, sin MSAA)
 };
 
 // Binary compatible with D3D11 viewport.
@@ -823,6 +824,8 @@ public:
 	// STV_REINTERP_PARCIAL_v1: si src y dst son pareja de alias sincronizada y dst no se escribio desde
 	// entonces, devuelve true y el rectangulo de src escrito desde la sincronizacion (vacio: r[2] <= r[0]).
 	virtual bool StvAliasParcial(Framebuffer *src, Framebuffer *dst, int r[4]) { return false; }
+	// STV_ZCOMPARTIDO_v1: a y b usan la MISMA imagen de depth.
+	virtual bool StvZCompartido(Framebuffer *a, Framebuffer *b) { return false; }
 	virtual void StvAliasSincronizado(Framebuffer *src, Framebuffer *dst) {}
 
 	// Dynamic state

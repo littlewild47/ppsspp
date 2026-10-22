@@ -342,6 +342,9 @@ public:
 	// p. ej. el mapa de sombras de Ghost of Sparta. "04161800,04181800" + escala en centesimas (100 = 1x).
 	std::string sStvFbsReducidos;
 	int iStvFbsEscala;
+	// STV_ZCOMPARTIDO_v1 (por juego): los framebuffers del mismo tamaño que la PSP dibuja con el MISMO depth buffer
+	// comparten una sola imagen de depth (sin copias de depth entre ellos). Prop debug.stv.zcomp (0/1) lo pisa.
+	bool bStvZCompartido;
 	// STV F6: el worker del GE (hilo de display lists en otro nucleo).
 	// PER_GAME; la prop debug.stv.ge la PISA cuando esta seteada (el banco).
 	bool bStvWorkerGE;

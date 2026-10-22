@@ -64,7 +64,7 @@ VKRFramebuffer::VKRFramebuffer(VulkanContext *vk, VulkanBarrierBatch *barriers, 
 
 	CreateImage(vulkan_, barriers, color, width, height, numLayers, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, true, tag);
 	if (createDepthStencilBuffer) {
-		CreateImage(vulkan_, barriers, depth, width, height, numLayers, VK_SAMPLE_COUNT_1_BIT, vulkan_->GetDeviceInfo().preferredDepthStencilFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, false, tag);
+		CreateImage(vulkan_, barriers, depthPropio, width, height, numLayers, VK_SAMPLE_COUNT_1_BIT, vulkan_->GetDeviceInfo().preferredDepthStencilFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, false, tag);
 	}
 
 	if (_multiSampleLevel > 0) {
@@ -91,10 +91,10 @@ void VKRFramebuffer::UpdateTag(const char *newTag) {
 	snprintf(name, sizeof(name), "fb_color_%s", tag_.c_str());
 	vulkan_->SetDebugName(color.image, VK_OBJECT_TYPE_IMAGE, name);
 	vulkan_->SetDebugName(color.rtView, VK_OBJECT_TYPE_IMAGE_VIEW, name);
-	if (depth.image) {
+	if (depthPropio.image) {
 		snprintf(name, sizeof(name), "fb_depth_%s", tag_.c_str());
-		vulkan_->SetDebugName(depth.image, VK_OBJECT_TYPE_IMAGE, name);
-		vulkan_->SetDebugName(depth.rtView, VK_OBJECT_TYPE_IMAGE_VIEW, name);
+		vulkan_->SetDebugName(depthPropio.image, VK_OBJECT_TYPE_IMAGE, name);
+		vulkan_->SetDebugName(depthPropio.rtView, VK_OBJECT_TYPE_IMAGE_VIEW, name);
 	}
 	for (size_t rpType = 0; rpType < (size_t)RenderPassType::TYPE_COUNT; rpType++) {
 		if (framebuf[rpType]) {
@@ -118,11 +118,11 @@ VkFramebuffer VKRFramebuffer::Get(VKRRenderPass *compatibleRenderPass, RenderPas
 	int attachmentCount = 0;
 	views[attachmentCount++] = color.rtView;  // 2D array texture if multilayered.
 	if (hasDepth) {
-		if (!depth.rtView) {
-			WARN_LOG(Log::G3D, "depth render type to non-depth fb: %p %p fmt=%d (%s %dx%d)", (void *)depth.image, (void *)depth.texAllLayersView, depth.format, tag_.c_str(), width, height);
+		if (!Z().rtView) {
+			WARN_LOG(Log::G3D, "depth render type to non-depth fb: %p %p fmt=%d (%s %dx%d)", (void *)Z().image, (void *)Z().texAllLayersView, Z().format, tag_.c_str(), width, height);
 			// Will probably crash, depending on driver.
 		}
-		views[attachmentCount++] = depth.rtView;
+		views[attachmentCount++] = Z().rtView;
 	}
 	if (rpType & RenderPassType::MULTISAMPLE) {
 		views[attachmentCount++] = msaaColor.rtView;
@@ -150,7 +150,7 @@ VkFramebuffer VKRFramebuffer::Get(VKRRenderPass *compatibleRenderPass, RenderPas
 
 VKRFramebuffer::~VKRFramebuffer() {
 	color.Delete(vulkan_);
-	depth.Delete(vulkan_);
+	depthPropio.Delete(vulkan_);  // STV_ZCOMPARTIDO_v1: solo el propio (el compartido lo borra su dueño)
 	msaaColor.Delete(vulkan_);
 	msaaDepth.Delete(vulkan_);
 
