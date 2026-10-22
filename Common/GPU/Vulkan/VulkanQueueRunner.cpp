@@ -320,6 +320,41 @@ void VulkanQueueRunner::PreprocessSteps(std::vector<VKRStep *> &steps) {
 		}
 	}
 
+	// STV_ZSOLOLECTURA_v1 (arco Colin McRae, 2026-10-21): un pase que CARGA el depth/stencil y no lo escribe
+	// (ningun pipeline con depth write ni stencil test, ningun clear de depth/stencil) lo volvia a guardar entero
+	// al cerrar. Con VK_EXT_load_store_op_none el guardado es NONE: no se escribe y el contenido se conserva
+	// (exacto por especificacion). Colin McRae: el buffer de luz (test EQUAL sin escritura) y el pase del
+	// multiplicado, a 1271x720. Valvula debug.stv.cmr.zsl (1 por defecto); respeta la fase del A/B por marca.
+	{
+		static int stvZsl = -1;
+		if (stvZsl < 0) { stvZsl = StvPropDef("debug.stv.cmr.zsl", 1); STV_LOG("STVZSL: modo=%d ext=%d", stvZsl, (int)vulkan_->Extensions().EXT_load_store_op_none); }
+		if (stvZsl >= 1 && vulkan_->Extensions().EXT_load_store_op_none && StvAbActivo()) {
+			static int nPasos = 0, nNone = 0, cad = 0;
+			for (int i = 0; i < (int)steps.size(); i++) {
+				VKRStep *st = steps[i];
+				if (st->stepType != VKRStepType::RENDER || !st->render.framebuffer || !st->render.framebuffer->Z().image) continue;
+				if (st->render.framebuffer->sampleCount != VK_SAMPLE_COUNT_1_BIT) continue;
+				nPasos++;
+				if (st->render.depthLoad != VKRRenderPassLoadAction::KEEP || st->render.stencilLoad != VKRRenderPassLoadAction::KEEP) continue;
+				if (st->render.depthStore != VKRRenderPassStoreAction::STORE || st->render.stencilStore != VKRRenderPassStoreAction::STORE) continue;
+				bool escribe = false;
+				for (const auto &c : st->commands) {
+					if (c.cmd == VKRRenderCommand::BIND_GRAPHICS_PIPELINE) {
+						const VKRGraphicsPipeline *p = c.graphics_pipeline.pipeline;
+						if (!p || !p->desc || p->desc->dss.depthWriteEnable || p->desc->dss.stencilTestEnable) { escribe = true; break; }
+					} else if (c.cmd == VKRRenderCommand::CLEAR) {
+						if (c.clear.clearMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) { escribe = true; break; }
+					}
+				}
+				if (escribe) continue;
+				st->render.depthStore = VKRRenderPassStoreAction::NONE;
+				st->render.stencilStore = VKRRenderPassStoreAction::NONE;
+				nNone++;
+			}
+			if (++cad >= 600) { cad = 0; STV_LOG("STVZSL: %d pases con depth, %d guardados como NONE (600 cuadros)", nPasos, nNone); nPasos = nNone = 0; }
+		}
+	}
+
 	// STV (dcload): pases cuyo primer draw es opaco y cubre todo: el color anterior
 	// no hace falta cargarlo. 1 = solo contar, 2 = aplicar (colorLoad DONT_CARE).
 	{
