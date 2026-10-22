@@ -69,7 +69,6 @@ struct CompatFlags {
 	bool GoWFramerateHack60;
 	bool ClearMeshIgnoresAlpha;   // STV: el clear por malla de triangulos puede pisar el alpha (el juego no lo usa)
 	bool StvZCompartido;   // STV_ZCOMPARTIDO_v1: framebuffers con el mismo depth de la PSP comparten la imagen de depth
-	bool StvClearZReal;    // STV_CLEARZ_v1: el clear de depth se hace como clear aunque el juego use tests EQUAL
 	bool FramerateHack30;
 	bool JitInvalidationHack;
 	bool HideISOFiles;
