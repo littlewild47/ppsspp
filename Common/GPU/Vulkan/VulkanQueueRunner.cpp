@@ -196,6 +196,11 @@ void VulkanQueueRunner::DestroyBackBuffers() {
 // Self-dependency: https://github.com/gpuweb/gpuweb/issues/442#issuecomment-547604827
 // Also see https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#synchronization-pipeline-barriers-subpass-self-dependencies
 VKRRenderPass *VulkanQueueRunner::GetRenderPass(const RPKey &key) {
+	// STV_RPCACHE_CANDADO_v1 (arco Colin McRae): se llama desde el hilo de emulacion (al grabar) y desde el de render
+	// (PerformRenderPass); el preprocesado del hilo de render puede cambiar las acciones de carga/guardado de un pase
+	// (clears fusionados, STV_DCLOAD_FIJO_v1) y crear una clave nueva mientras el otro hilo busca: el Insert del
+	// DenseHashMap puede redimensionarlo bajo una lectura concurrente.
+	std::lock_guard<std::mutex> guard(stvRenderPassesMutex_);
 	VKRRenderPass *foundPass;
 	if (renderPasses_.Get(key, &foundPass)) {
 		return foundPass;
