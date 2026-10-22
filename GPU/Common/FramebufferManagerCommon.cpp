@@ -1182,6 +1182,21 @@ void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, Vir
 	int w = std::min(src->renderWidth, dst->renderWidth);
 	int h = std::min(src->renderHeight, dst->renderHeight);
 
+	// STV_ZVERSION_v1 (arco Colin McRae, 2026-10-21): si el depth de dst ya ES el de src (misma version: dst lo
+	// recibio de src por una copia y ninguno de los dos se escribio desde entonces), la copia no cambia nada.
+	// Colin McRae dibuja en A, pasa a B (mismo Z, B solo LEE el depth: test EQUAL sin escritura) y vuelve a A:
+	// PPSSPP copiaba el depth de B a A (el mismo que A le habia dado), a pantalla completa con gl_FragDepth.
+	// Valvula debug.stv.cmr.zver (1 por defecto; 0 = copia siempre, como upstream).
+	static int stvZVerModo = -1;
+	if (stvZVerModo < 0) stvZVerModo = StvPropDef("debug.stv.cmr.zver", 1);
+	static int stvZSalteadas = 0;
+	const bool stvMismoZ = src->stvZVer != 0 && src->stvZVer == dst->stvZVer && w == src->renderWidth && h == src->renderHeight &&
+		src->renderWidth == dst->renderWidth && src->renderHeight == dst->renderHeight;
+	if (stvZVerModo >= 1 && stvMismoZ) {
+		stvZSalteadas++;
+		return;
+	}
+
 	// STV_CMR_DIAG_v1 (arco Colin McRae, 2026-10-21): censo de las copias de profundidad entre framebuffers que
 	// comparten el Z (STVZCOPIA cada 120 cuadros con debug.stv.cmr.diag=1) y valvula de INSTRUMENTO
 	// debug.stv.cmr.zcopia=1 que las saltea (rompe la imagen a proposito: mide cuanto cuestan).
@@ -1189,11 +1204,12 @@ void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, Vir
 		static int nCopias = 0, ultimoFlip = 0;
 		nCopias++;
 		if (StvPropInt("debug.stv.cmr.diag") == 1 && gpuStats.numFlips - ultimoFlip >= 120) {
-			STV_LOG("STVZCOPIA: %.2f por cuadro (%08x %dx%d -> %08x %dx%d, raster=%d copy=%d blit=%d)", nCopias / (float)(gpuStats.numFlips - ultimoFlip),
+			STV_LOG("STVZCOPIA: %.2f por cuadro, salteadas %.2f (%08x %dx%d -> %08x %dx%d, raster=%d copy=%d blit=%d)", nCopias / (float)(gpuStats.numFlips - ultimoFlip),
+				stvZSalteadas / (float)(gpuStats.numFlips - ultimoFlip),
 				src->fb_address, src->renderWidth, src->renderHeight, dst->fb_address, dst->renderWidth, dst->renderHeight,
 				(int)(draw_->GetDeviceCaps().fragmentShaderDepthWriteSupported && draw_->GetDeviceCaps().textureDepthSupported),
 				(int)draw_->GetDeviceCaps().framebufferSeparateDepthCopySupported, (int)draw_->GetDeviceCaps().framebufferDepthBlitSupported);
-			nCopias = 0; ultimoFlip = gpuStats.numFlips;
+			nCopias = 0; stvZSalteadas = 0; ultimoFlip = gpuStats.numFlips;
 		}
 		if (StvPropInt("debug.stv.cmr.zcopia") == 1)
 			return;
@@ -1210,6 +1226,11 @@ void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, Vir
 		draw_->BlitFramebuffer(src->fbo, 0, 0, w, h, dst->fbo, 0, 0, w, h, Draw::Aspect::DEPTH_BIT, Draw::FB_BLIT_NEAREST, "BlitFramebufferDepth");
 		RebindFramebuffer("After BlitFramebufferDepth");
 	}
+	// STV_ZVERSION_v1: copia entera (mismo tamaño de render) = mismo contenido; parcial = contenido nuevo.
+	if (src->renderWidth == dst->renderWidth && src->renderHeight == dst->renderHeight && w == src->renderWidth && h == src->renderHeight)
+		dst->stvZVer = src->stvZVer;
+	else
+		StvZNueva(dst);
 
 	draw_->Invalidate(InvalidationFlags::CACHED_RENDER_STATE);
 }
@@ -1291,6 +1312,7 @@ void FramebufferManagerCommon::NotifyRenderFramebufferSwitched(VirtualFramebuffe
 			float clearDepth = 0.0f;
 			if (vfb->usageFlags & FB_USAGE_INVALIDATE_DEPTH) {
 				depthAction = Draw::RPAction::CLEAR;
+				StvZNueva(vfb);  // STV_ZVERSION_v1
 				clearDepth = GetDepthScaleFactors(gstate_c.UseFlags()).Offset();
 				vfb->usageFlags &= ~FB_USAGE_INVALIDATE_DEPTH;
 			}
@@ -1387,6 +1409,8 @@ void FramebufferManagerCommon::UpdateFromMemory(u32 addr, int size) {
 }
 
 void FramebufferManagerCommon::DrawPixels(VirtualFramebuffer *vfb, int dstX, int dstY, const u8 *srcPixels, GEBufferFormat srcPixelFormat, int srcStride, int width, int height, RasterChannel channel, const char *tag) {
+	if (channel == RASTER_DEPTH)
+		StvZNueva(vfb);  // STV_ZVERSION_v1
 	textureCache_->ForgetLastTexture();
 	shaderManager_->DirtyLastShader();
 	float u0 = 0.0f, u1 = 1.0f;
@@ -2140,6 +2164,7 @@ void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w,
 	_dbg_assert_(w > 0);
 	_dbg_assert_(h > 0);
 	VirtualFramebuffer old = *vfb;
+	StvZNueva(vfb);  // STV_ZVERSION_v1: fbo nuevo (o recreado), depth de otro origen
 
 	int oldWidth = vfb->bufferWidth;
 	int oldHeight = vfb->bufferHeight;
@@ -3935,6 +3960,8 @@ void FramebufferManagerCommon::DrawActiveTexture(float x, float y, float w, floa
 }
 
 void FramebufferManagerCommon::BlitFramebuffer(VirtualFramebuffer *dst, int dstX, int dstY, VirtualFramebuffer *src, int srcX, int srcY, int w, int h, int bpp, RasterChannel channel, const char *tag) {
+	if (channel == RASTER_DEPTH)
+		StvZNueva(dst);  // STV_ZVERSION_v1
 	if (!dst->fbo || !src->fbo || !useBufferedRendering_) {
 		// This can happen if they recently switched from non-buffered.
 		return;
@@ -4074,6 +4101,7 @@ void FramebufferManagerCommon::BlitUsingRaster(
 
 	if (pipeline->info.writeChannel == RASTER_DEPTH) {
 		_dbg_assert_(draw_->GetDeviceCaps().fragmentShaderDepthWriteSupported);
+		StvZNuevaFbo(dest);  // STV_ZVERSION_v1
 	}
 
 	int destW, destH, srcW, srcH;

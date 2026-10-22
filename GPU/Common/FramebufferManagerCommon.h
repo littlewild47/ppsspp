@@ -172,6 +172,9 @@ struct VirtualFramebuffer {
 	// can even be within a frame.
 	int colorBindSeq;
 	int depthBindSeq;
+	// STV_ZVERSION_v1 (arco Colin McRae): version del CONTENIDO del depth (0 = desconocida). Toda escritura de
+	// depth le da una version nueva; una copia de depth le pasa la de la fuente. Misma version = mismo contenido.
+	u32 stvZVer;
 
 	// These are mainly used for garbage collection purposes and similar.
 	// Cannot be used to determine new-ness against a similar other buffer, since they are
@@ -365,6 +368,9 @@ public:
 		}
 	}
 	void SetDepthFrameBuffer(bool isClearingDepth);
+	// STV_ZVERSION_v1: el depth de v cambio (contenido nuevo, distinto de todo otro).
+	void StvZNueva(VirtualFramebuffer *v) { if (v) v->stvZVer = ++stvZVerSig_; }
+	void StvZNuevaFbo(Draw::Framebuffer *fbo) { for (auto v : vfbs_) if (v->fbo == fbo) StvZNueva(v); }
 
 	void RebindFramebuffer(const char *tag);
 	std::vector<const VirtualFramebuffer *> GetFramebufferList() const;
@@ -576,6 +582,7 @@ protected:
 	void NotifyRenderFramebufferSwitched(VirtualFramebuffer *prevVfb, VirtualFramebuffer *vfb, bool isClearingDepth);
 
 	void BlitFramebufferDepth(VirtualFramebuffer *src, VirtualFramebuffer *dst, bool allowSizeMismatch = false);
+	u32 stvZVerSig_ = 0;  // STV_ZVERSION_v1
 
 	void ResizeFramebufFBO(VirtualFramebuffer *vfb, int w, int h, bool force = false, bool skipCopy = false);
 

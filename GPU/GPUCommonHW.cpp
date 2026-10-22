@@ -790,6 +790,9 @@ void GPUCommonHW::CheckDepthUsage(VirtualFramebuffer *vfb) {
 			framebufferManager_->SetDepthFrameBuffer(isClearingDepth);
 		}
 	}
+	// STV_ZVERSION_v1 (DESPUES de SetDepthFrameBuffer, que decide la copia con el contenido previo): cada draw que escribe depth (o lo limpia) le da contenido nuevo al depth de vfb.
+	if (vfb && (gstate.isModeClear() ? gstate.isClearModeDepthMask() : (gstate.isDepthTestEnabled() && gstate.isDepthWriteEnabled())))
+		framebufferManager_->StvZNueva(vfb);
 }
 
 void GPUCommonHW::InvalidateCache(u32 addr, int size, GPUInvalidationType type) {
