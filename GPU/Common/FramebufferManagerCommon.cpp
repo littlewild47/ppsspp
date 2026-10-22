@@ -1182,6 +1182,23 @@ void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, Vir
 	int w = std::min(src->renderWidth, dst->renderWidth);
 	int h = std::min(src->renderHeight, dst->renderHeight);
 
+	// STV_CMR_DIAG_v1 (arco Colin McRae, 2026-10-21): censo de las copias de profundidad entre framebuffers que
+	// comparten el Z (STVZCOPIA cada 120 cuadros con debug.stv.cmr.diag=1) y valvula de INSTRUMENTO
+	// debug.stv.cmr.zcopia=1 que las saltea (rompe la imagen a proposito: mide cuanto cuestan).
+	{
+		static int nCopias = 0, ultimoFlip = 0;
+		nCopias++;
+		if (StvPropInt("debug.stv.cmr.diag") == 1 && gpuStats.numFlips - ultimoFlip >= 120) {
+			STV_LOG("STVZCOPIA: %.2f por cuadro (%08x %dx%d -> %08x %dx%d, raster=%d copy=%d blit=%d)", nCopias / (float)(gpuStats.numFlips - ultimoFlip),
+				src->fb_address, src->renderWidth, src->renderHeight, dst->fb_address, dst->renderWidth, dst->renderHeight,
+				(int)(draw_->GetDeviceCaps().fragmentShaderDepthWriteSupported && draw_->GetDeviceCaps().textureDepthSupported),
+				(int)draw_->GetDeviceCaps().framebufferSeparateDepthCopySupported, (int)draw_->GetDeviceCaps().framebufferDepthBlitSupported);
+			nCopias = 0; ultimoFlip = gpuStats.numFlips;
+		}
+		if (StvPropInt("debug.stv.cmr.zcopia") == 1)
+			return;
+	}
+
 	// Some GPUs can copy depth but only if stencil gets to come along for the ride. We only want to use this if there is no blit functionality.
 	if (useRaster) {
 		BlitUsingRaster(src->fbo, 0, 0, w, h, dst->fbo, 0, 0, w, h, false, dst->renderScaleFactor, Get2DPipeline(Draw2DShader::DRAW2D_COPY_DEPTH), "BlitDepthRaster");
