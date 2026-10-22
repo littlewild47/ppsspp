@@ -371,6 +371,8 @@ public:
 	// STV_ZVERSION_v1: el depth de v cambio (contenido nuevo, distinto de todo otro).
 	void StvZNueva(VirtualFramebuffer *v) { if (v) v->stvZVer = ++stvZVerSig_; }
 	void StvZNuevaFbo(Draw::Framebuffer *fbo) { for (auto v : vfbs_) if (v->fbo == fbo) StvZNueva(v); }
+	// STV_FUSION_LUZ_v1: ver FramebufferManagerCommon.cpp. Llamar justo antes de aplicar la textura del draw.
+	bool StvFusionarLuz(VirtualFramebuffer *tex);
 
 	void RebindFramebuffer(const char *tag);
 	std::vector<const VirtualFramebuffer *> GetFramebufferList() const;

@@ -390,6 +390,7 @@ public:
 	// (ApplyTexture suelta nextTexture_: se recuerda lo ultimo aplicado.)
 	const TexCacheEntry *StvEntradaActual() const { return stvUltimaEntrada_; }
 	const VirtualFramebuffer *StvFbTexturaActual() const { return stvUltimoFb_; }
+	VirtualFramebuffer *StvFbTexturaSiguiente() const { return nextFramebufferTexture_; }  // STV_FUSION_LUZ_v1: el que va a aplicar ApplyTexture
 
 	virtual void StartFrame();
 

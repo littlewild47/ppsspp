@@ -1157,6 +1157,69 @@ void FramebufferManagerCommon::DestroyFramebuf(VirtualFramebuffer *v) {
 	delete v;
 }
 
+// STV_FUSION_LUZ_v1 (arco Colin McRae, 2026-10-22): el juego termina el buffer de luz B y reabre el cuadro A solo para
+// multiplicarlo por B a pantalla completa (A = B * A). En la Mali reabrir A cuesta cargar su color y precargar su depth
+// (~2 ms a 1271x720). Si el draw es EXACTAMENTE ese patron, se retoma el pase de B (que todavia es el ultimo de la cola),
+// el mismo draw lee A en lugar de B (B * A: el mismo producto, el mismo mapeo de UV porque A y B son iguales) y despues
+// A pasa a usar la imagen de B y B la de A. Todo lo que el juego dibuja despues en A sigue en ese pase. B queda con el
+// contenido viejo de A: en este juego nadie lee B despues del multiplicado (al cuadro siguiente se llena entero).
+// Condiciones (cada una con su razon): ver abajo. Por juego (StvFusionLuz) o prop debug.stv.cmr.fusion (0/1).
+bool FramebufferManagerCommon::StvFusionarLuz(VirtualFramebuffer *tex) {
+	static int modo = -2;
+	if (modo == -2) modo = StvPropDef("debug.stv.cmr.fusion", -1);
+	const bool activo = modo >= 0 ? modo == 1 : PSP_CoreParameter().compat.flags().StvFusionLuz;
+	if (!activo || !StvAbActivo())
+		return false;
+	static int nHechas = 0, nPatron = 0, nFallas = 0, ultimoFlip = 0;
+	const bool diag = StvPropInt("debug.stv.cmr.diag") >= 1;
+	if (diag && gpuStats.numFlips - ultimoFlip >= 300) {
+		STV_LOG("STVFUSION: en %d cuadros %d multiplicados con el patron, %d fusionados, %d no se pudo retomar el pase", gpuStats.numFlips - ultimoFlip, nPatron, nHechas, nFallas);
+		nHechas = nPatron = nFallas = 0; ultimoFlip = gpuStats.numFlips;
+	}
+	VirtualFramebuffer *A = currentRenderVfb_;
+	VirtualFramebuffer *B = tex;
+	if (!A || !B || A == B || !A->fbo || !B->fbo || !useBufferedRendering_)
+		return false;
+	// El draw: un multiplicado puro, sin nada que dependa de cual de los dos sea textura y cual destino.
+	if (!gstate.isModeThrough() || gstate.isModeClear() || !gstate.isTextureMapEnabled())
+		return false;
+	if (!gstate.isAlphaBlendEnabled() || gstate.getBlendEq() != GE_BLENDMODE_MUL_AND_ADD ||
+		gstate.getBlendFuncA() != GE_SRCBLEND_DSTCOLOR || gstate.getBlendFuncB() != GE_DSTBLEND_FIXB || gstate.getFixB() != 0)
+		return false;
+	// DECAL sobre RGB: el color del fragmento es el texel tal cual (sin el color del vertice ni redondeos intermedios), asi
+	// que texel(B) * dst(A) == texel(A) * dst(B) bit a bit. Sin color doubling ni niebla (through no la usa).
+	if (gstate.getTextureFunction() != GE_TEXFUNC_DECAL || gstate.isTextureAlphaUsed() || gstate.isColorDoublingEnabled())
+		return false;
+	if ((gstate.isDepthTestEnabled() && gstate.getDepthTestFunction() != GE_COMP_ALWAYS) || gstate.isDepthWriteEnabled() ||
+		gstate.isStencilTestEnabled() || (gstate.isAlphaTestEnabled() && gstate.getAlphaTestFunction() != GE_COMP_ALWAYS) ||
+		gstate.isColorTestEnabled() || gstate.isLogicOpEnabled() || gstate.getColorMask() != 0)
+		return false;
+	// Los dos framebuffers: mismo formato, tamaño y escala, con la MISMA imagen de depth (si no, cambiar las imagenes de
+	// color de lugar les cambiaria el depth). B sin gemela (la alternancia la tiene atada a su imagen).
+	if (A->fb_format != B->fb_format || A->fb_stride != B->fb_stride || A->width != B->width || A->height != B->height ||
+		A->renderWidth != B->renderWidth || A->renderHeight != B->renderHeight || A->renderScaleFactor != B->renderScaleFactor ||
+		B->stvGemela || !draw_->StvZCompartido(A->fbo, B->fbo))
+		return false;
+	nPatron++;
+	// El pase de A recien abierto tiene que estar vacio y el anterior tiene que ser el de B.
+	if (!draw_->StvVolverAlPaso(B->fbo, A->fbo)) {
+		nFallas++;
+		return false;
+	}
+	std::swap(A->fbo, B->fbo);
+	if (A->stvGemela) {   // la gemela de A sirve para cualquier imagen de A del mismo tamaño (comparte el depth)
+		A->stvGemelaDe = A->fbo;
+		A->stvGemelaLista = false;
+	}
+	A->colorBindSeq = GetBindSeqCount();
+	DiscardFramebufferCopy();
+	textureCache_->ForgetLastTexture();
+	shaderManager_->DirtyLastShader();
+	gstate_c.Dirty(DIRTY_VIEWPORTSCISSOR_STATE | DIRTY_BLEND_STATE | DIRTY_RASTER_STATE | DIRTY_DEPTHSTENCIL_STATE | DIRTY_TEXTURE_IMAGE);
+	nHechas++;
+	return true;
+}
+
 void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, VirtualFramebuffer *dst, bool allowSizeMismatch) {
 	_dbg_assert_(src && dst);
 	_dbg_assert_(src != dst);

@@ -828,6 +828,8 @@ public:
 	virtual bool StvAliasParcial(Framebuffer *src, Framebuffer *dst, int r[4]) { return false; }
 	// STV_ZCOMPARTIDO_v1: a y b usan la MISMA imagen de depth.
 	virtual bool StvZCompartido(Framebuffer *a, Framebuffer *b) { return false; }
+	// STV_FUSION_LUZ_v1: retomar el paso de `anterior` descartando el paso vacio de `actual` (solo Vulkan).
+	virtual bool StvVolverAlPaso(Framebuffer *anterior, Framebuffer *actual) { return false; }
 	virtual void StvAliasSincronizado(Framebuffer *src, Framebuffer *dst) {}
 
 	// Dynamic state

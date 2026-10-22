@@ -1313,6 +1313,16 @@ void DrawEngineVulkan::Flush() {
 		// Only here, where we know whether to clear or to draw primitives, should we actually set the current framebuffer! Because that gives use the opportunity
 		// to use a "pre-clear" render pass, for high efficiency on tilers.
 		if (result.action == SW_DRAW_INDEXED) {
+			// STV_FUSION_LUZ_v1: el multiplicado del cuadro por el buffer de luz se hace en el pase de luz (ver
+			// FramebufferManagerCommon::StvFusionarLuz). Aca solo se exige que el draw cubra el framebuffer entero (una
+			// tira de rectangulos sin huecos desde 0,0 hasta el ancho y alto PSP del destino).
+			if (textureNeedsApply && result.stvCubre && result.stvBboxValido && textureCache_->StvFbTexturaSiguiente()) {
+				const VirtualFramebuffer *rt = framebufferManager_->GetCurrentRenderVFB();
+				if (rt && result.stvBbox[0] <= 0.0f && result.stvBbox[1] <= 0.0f && result.stvBbox[2] >= (float)rt->width && result.stvBbox[3] >= (float)rt->height &&
+					framebufferManager_->StvFusionarLuz(textureCache_->StvFbTexturaSiguiente())) {
+					lastPipeline_ = nullptr;   // el paso retomado puede tener otro pipeline atado
+				}
+			}
 			if (textureNeedsApply) {
 				gstate_c.pixelMapped = result.pixelMapped;
 				gstate_c.dstSquared = false;

@@ -338,6 +338,10 @@ public:
 			curRenderStep_->render.framebuffer->StvMarcar(r.offset.x, r.offset.y, r.offset.x + (int)r.extent.width, r.offset.y + (int)r.extent.height);
 	}
 	uint32_t stvAreaAcotados_ = 0;
+	// STV_FUSION_LUZ_v1: si el paso actual es de `actual`, esta vacio (sin comandos ni clears) y el anterior es un paso
+	// de render de `anterior`, borra el actual y retoma el anterior (como el "eliminate dupes" de upstream, pero
+	// restaurando las banderas de pipeline del paso y su area). Devuelve false sin tocar nada si no se puede.
+	bool StvVolverAlPaso(VKRFramebuffer *anterior, VKRFramebuffer *actual);
 	bool StvPasoSinDraws() const { return curRenderStep_ && curRenderStep_->stepType == VKRStepType::RENDER && curRenderStep_->render.numDraws == 0; }
 	void StvPrimerDraw(const char *desc) {
 		if (StvPasoSinDraws() && !curRenderStep_->render.stvPrimero[0]) { strncpy(curRenderStep_->render.stvPrimero, desc, sizeof(curRenderStep_->render.stvPrimero) - 1); curRenderStep_->render.stvPrimero[sizeof(curRenderStep_->render.stvPrimero) - 1] = 0; }

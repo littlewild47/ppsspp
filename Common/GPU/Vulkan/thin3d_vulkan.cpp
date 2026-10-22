@@ -562,6 +562,7 @@ public:
 	void StvSucioLimpiar(Framebuffer *fb) override;
 	bool StvAliasParcial(Framebuffer *src, Framebuffer *dst, int r[4]) override;
 	bool StvZCompartido(Framebuffer *a, Framebuffer *b) override;  // STV_ZCOMPARTIDO_v1
+	bool StvVolverAlPaso(Framebuffer *anterior, Framebuffer *actual) override;  // STV_FUSION_LUZ_v1
 	void StvAliasSincronizado(Framebuffer *src, Framebuffer *dst) override;
 
 	void HandleEvent(Event ev, int width, int height, void *param1, void *param2) override;
@@ -1988,6 +1989,12 @@ bool VKContext::StvSucio(Framebuffer *fb, int r[4]) {
 	if (!f || !f->stvSucioHay) return false;
 	for (int i = 0; i < 4; i++) r[i] = f->stvSucio[i];
 	return true;
+}
+
+bool VKContext::StvVolverAlPaso(Framebuffer *anterior, Framebuffer *actual) {  // STV_FUSION_LUZ_v1
+	if (!anterior || !actual)
+		return false;
+	return renderManager_.StvVolverAlPaso(((VKFramebuffer *)anterior)->GetFB(), ((VKFramebuffer *)actual)->GetFB());
 }
 
 bool VKContext::StvZCompartido(Framebuffer *a, Framebuffer *b) {  // STV_ZCOMPARTIDO_v1

@@ -986,6 +986,40 @@ VKRGraphicsPipeline *VulkanRenderManager::CreateGraphicsPipeline(VKRGraphicsPipe
 	return pipeline;
 }
 
+bool VulkanRenderManager::StvVolverAlPaso(VKRFramebuffer *anterior, VKRFramebuffer *actual) {
+	if (!curRenderStep_ || curRenderStep_->stepType != VKRStepType::RENDER || curRenderStep_->render.framebuffer != actual || !anterior)
+		return false;
+	if (!curRenderStep_->commands.empty() || curRenderStep_->render.numDraws != 0)
+		return false;
+	if (curRenderStep_->render.colorLoad == VKRRenderPassLoadAction::CLEAR || curRenderStep_->render.depthLoad == VKRRenderPassLoadAction::CLEAR ||
+		curRenderStep_->render.stencilLoad == VKRRenderPassLoadAction::CLEAR)
+		return false;
+	if (steps_.size() < 2 || steps_.back() != curRenderStep_)
+		return false;
+	VKRStep *prev = steps_[steps_.size() - 2];
+	if (prev->stepType != VKRStepType::RENDER || prev->render.framebuffer != anterior)
+		return false;
+	// Fuera el paso vacio (como "More redundant bind elimination").
+	delete steps_.back();
+	steps_.pop_back();
+	curRenderStep_ = prev;
+	// Lo que EndCurRenderStep guardo del paso anterior se recupera: las banderas acumuladas (si no, un paso que ya uso
+	// depth podria terminar como pase sin depth) y el area (se vuelve a unir con lo que se dibuje).
+	curPipelineFlags_ = prev->render.pipelineFlags;
+	const VkRect2D &ra = prev->render.renderArea;
+	curRenderArea_.Reset();
+	curRenderArea_.SetRect(ra.offset.x, ra.offset.y, (int)ra.extent.width, (int)ra.extent.height);
+	curStepHasViewport_ = false;
+	curStepHasScissor_ = false;
+	for (const auto &c : prev->commands) {
+		if (c.cmd == VKRRenderCommand::VIEWPORT) curStepHasViewport_ = true;
+		else if (c.cmd == VKRRenderCommand::SCISSOR) curStepHasScissor_ = true;
+	}
+	curWidth_ = anterior->width;
+	curHeight_ = anterior->height;
+	return true;
+}
+
 void VulkanRenderManager::EndCurRenderStep() {
 	if (!curRenderStep_)
 		return;
