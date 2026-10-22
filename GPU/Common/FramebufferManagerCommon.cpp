@@ -1192,6 +1192,11 @@ void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, Vir
 	static int stvZSalteadas = 0;
 	const bool stvMismoZ = src->stvZVer != 0 && src->stvZVer == dst->stvZVer && w == src->renderWidth && h == src->renderHeight &&
 		src->renderWidth == dst->renderWidth && src->renderHeight == dst->renderHeight;
+	if (StvPropInt("debug.stv.cmr.diag") == 2) {   // STV_CMR_DIAG_v1: cada copia, 1 cuadro de cada 120
+		if (gpuStats.numFlips % 120 == 0)
+			STV_LOG("STVZDET f=%d %08x(v%u) -> %08x(v%u) %s", gpuStats.numFlips, src->fb_address, src->stvZVer, dst->fb_address, dst->stvZVer,
+				(stvZVerModo >= 1 && stvMismoZ) ? "SALTEADA" : "copia");
+	}
 	if (stvZVerModo >= 1 && stvMismoZ && StvAbActivo()) {  // con debug.stv.abgate=1, solo en la fase B del A/B por marca
 		stvZSalteadas++;
 		return;
