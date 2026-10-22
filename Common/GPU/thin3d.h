@@ -304,6 +304,8 @@ enum class ReadbackMode {
 
 constexpr uint32_t MAX_TEXTURE_SLOTS = 3;
 
+class Framebuffer;  // STV_ZCOMPARTIDO_v1: FramebufferDesc::stvZCompartir
+
 struct FramebufferDesc {
 	int width;
 	int height;
