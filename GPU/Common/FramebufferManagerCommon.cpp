@@ -1557,8 +1557,15 @@ bool FramebufferManagerCommon::BindFramebufferAsColorTexture(int stage, VirtualF
 						framebuffer->fbo ? 1 : 0, layer, framebuffer->fbo ? framebuffer->fbo->MultiSampleLevel() : -1, (unsigned)framebuffer->usageFlags);
 				}
 			}
+			// STV_ALTERNA_Z_v1 (arco Colin McRae, 2026-10-21): con depth en uso la gemela COMPARTE la imagen de depth
+			// (STV_ZCOMPARTIDO_v1): alternar el color ya no pierde el depth. Colin McRae lee su propio cuadro (un
+			// desenfoque de lo lejano, corrido 1 pixel) en medio de la escena: era una copia entera por cuadro.
+			// debug.stv.cmr.alternaz=0 vuelve a excluir los framebuffers con depth.
+			static int stvAlternaZ = -1;
+			if (stvAlternaZ < 0) stvAlternaZ = StvPropDef("debug.stv.cmr.alternaz", 1);
+			const bool stvUsaZ = (framebuffer->usageFlags & FB_USAGE_RENDER_DEPTH) != 0;
 			if (stvAlterna >= 1 && draw_->StvSucioSoportado() && framebuffer->fbo && (layer == 0 || layer == -1) && framebuffer->fbo->Layers() == 1 &&
-				framebuffer->fbo->MultiSampleLevel() == 0 && !(framebuffer->usageFlags & FB_USAGE_RENDER_DEPTH)) {
+				framebuffer->fbo->MultiSampleLevel() == 0 && (!stvUsaZ || stvAlternaZ >= 1)) {
 				int stvR[4];
 				if (stvAlternaPaso_ == framebuffer && framebuffer->stvGemela && framebuffer->stvGemelaLista && !draw_->StvSucio(framebuffer->fbo, stvR)) {
 					// Ya se alterno y desde entonces no se escribio nada: la gemela tiene el mismo contenido.
@@ -1568,15 +1575,20 @@ bool FramebufferManagerCommon::BindFramebufferAsColorTexture(int stage, VirtualF
 					return true;
 				}
 				Draw::Framebuffer *a = framebuffer->fbo;
-				if (framebuffer->stvGemela && (framebuffer->stvGemelaDe != a || framebuffer->stvGemela->Width() != a->Width() || framebuffer->stvGemela->Height() != a->Height()))
+				if (framebuffer->stvGemela && (framebuffer->stvGemelaDe != a || framebuffer->stvGemela->Width() != a->Width() || framebuffer->stvGemela->Height() != a->Height() ||
+					(stvUsaZ && !draw_->StvZCompartido(a, framebuffer->stvGemela))))  // STV_ALTERNA_Z_v1: una gemela sin el depth de a no sirve
 					StvSoltarGemela(framebuffer);
 				if (!framebuffer->stvGemela) {
 					char tag[160];
 					snprintf(tag, sizeof(tag), "%s_gemela", a->Tag());
-					framebuffer->stvGemela = draw_->CreateFramebuffer({ a->Width(), a->Height(), 1, a->Layers(), 0, true, tag });
+					Draw::FramebufferDesc gd{ a->Width(), a->Height(), 1, a->Layers(), 0, true, tag };
+					gd.stvZCompartir = a;  // STV_ALTERNA_Z_v1: la gemela usa SIEMPRE el depth de a (misma memoria de la PSP)
+					framebuffer->stvGemela = draw_->CreateFramebuffer(gd);
 					framebuffer->stvGemelaLista = false;
 				}
 				Draw::Framebuffer *b = framebuffer->stvGemela;
+				if (b && stvUsaZ && !draw_->StvZCompartido(a, b))
+					b = nullptr;  // sin depth compartido no se puede alternar: copia como upstream (mas abajo)
 				if (b) {
 					int r[4] = { 0, 0, a->Width(), a->Height() };
 					bool hay = draw_->StvSucio(a, r);
