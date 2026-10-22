@@ -1,3 +1,4 @@
+#include <mutex>
 #include "Common/StringUtils.h"
 #include "Common/GPU/Vulkan/VulkanFramebuffer.h"
 #include "Common/GPU/Vulkan/VulkanQueueRunner.h"
@@ -597,6 +598,11 @@ VkRenderPass VKRRenderPass::Get(VulkanContext *vulkan, RenderPassType rpType, Vk
 
 	_dbg_assert_(!((rpType & RenderPassType::MULTISAMPLE) && sampleCount == VK_SAMPLE_COUNT_1_BIT));
 
+	// STV_RPCACHE_CANDADO_v1: se llama desde el hilo de emulacion, el de compilacion de pipelines y el de render. Sin
+	// candado, un hilo podia ver el pass nuevo con el sampleCount viejo y encolar el BORRADO del VkRenderPass que el
+	// otro acababa de crear y estaba usando.
+	static std::mutex stvMutex;
+	std::lock_guard<std::mutex> guard(stvMutex);
 	if (!pass[(int)rpType] || sampleCounts[(int)rpType] != sampleCount) {
 		if (pass[(int)rpType]) {
 			vulkan->Delete().QueueDeleteRenderPass(pass[(int)rpType]);
