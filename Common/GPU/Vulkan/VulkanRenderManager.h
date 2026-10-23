@@ -573,9 +573,13 @@ public:
 	}
 	// STV_IDXCHECK_v1 (instrumento): marca el ultimo DRAW_INDEXED con sus indices y vertices en el push buffer (punteros
 	// de CPU) y una suma de cada uno; el hilo de render la recalcula al ejecutarlo. Avisa si un indice se pasa de nverts.
+	// Muestra: los primeros y los ultimos 16 bytes. El push buffer es memoria sin cache de CPU: leerlo entero bajaba
+	// el juego de 58 a 22 cuadros/s y escondia la carrera (que aparece cerca de 60).
 	static uint32_t StvSuma(const void *p, uint32_t n) {
 		const uint8_t *b = (const uint8_t *)p; uint32_t h = 2166136261u;
-		for (uint32_t i = 0; i < n; i++) { h ^= b[i]; h *= 16777619u; }
+		const uint32_t k = n < 16 ? n : 16;
+		for (uint32_t i = 0; i < k; i++) { h ^= b[i]; h *= 16777619u; }
+		for (uint32_t i = n - k; i < n; i++) { h ^= b[i]; h *= 16777619u; }
 		return h;
 	}
 	void StvMarcarDraw(const void *ip, uint32_t ib, const void *vp, uint32_t vb, int nverts);
