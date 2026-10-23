@@ -567,8 +567,18 @@ public:
 		_dbg_assert_(numUboOffsets <= ARRAY_SIZE(data.drawIndexed.uboOffsets));
 		for (int i = 0; i < numUboOffsets; i++)
 			data.drawIndexed.uboOffsets[i] = uboOffsets[i];
+		data.drawIndexed.stvIp = nullptr;  // STV_IDXCHECK_v1
+		data.drawIndexed.stvVp = nullptr;
 		curRenderStep_->render.numDraws++;
 	}
+	// STV_IDXCHECK_v1 (instrumento): marca el ultimo DRAW_INDEXED con sus indices y vertices en el push buffer (punteros
+	// de CPU) y una suma de cada uno; el hilo de render la recalcula al ejecutarlo. Avisa si un indice se pasa de nverts.
+	static uint32_t StvSuma(const void *p, uint32_t n) {
+		const uint8_t *b = (const uint8_t *)p; uint32_t h = 2166136261u;
+		for (uint32_t i = 0; i < n; i++) { h ^= b[i]; h *= 16777619u; }
+		return h;
+	}
+	void StvMarcarDraw(const void *ip, uint32_t ib, const void *vp, uint32_t vb, int nverts);
 
 	// These can be useful both when inspecting in RenderDoc, and when manually inspecting recorded commands
 	// in the debugger.
