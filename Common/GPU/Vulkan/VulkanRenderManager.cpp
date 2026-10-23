@@ -1002,7 +1002,8 @@ void VulkanRenderManager::StvMarcarDraw(const void *ip, uint32_t ib, const void 
 	if (d.cmd != VKRRenderCommand::DRAW_INDEXED)
 		return;
 	d.drawIndexed.stvIp = ip; d.drawIndexed.stvIb = ib; d.drawIndexed.stvIs = StvSuma(ip, ib);
-	d.drawIndexed.stvVp = vp; d.drawIndexed.stvVb = vb; d.drawIndexed.stvVs = vp ? StvSuma(vp, vb) : 0;
+	// activo 1 = solo indices (barato: no tapa la carrera); 2 = tambien vertices (caro: la tapa, medido 0/25).
+	d.drawIndexed.stvVp = activo >= 2 ? vp : nullptr; d.drawIndexed.stvVb = vb; d.drawIndexed.stvVs = (activo >= 2 && vp) ? StvSuma(vp, vb) : 0;
 	const uint16_t *idx = (const uint16_t *)ip;
 	int maxI = -1;
 	for (uint32_t i = 0; i < ib / 2; i++) if (idx[i] > maxI) maxI = idx[i];
