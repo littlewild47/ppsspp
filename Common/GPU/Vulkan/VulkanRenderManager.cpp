@@ -998,7 +998,7 @@ void VulkanRenderManager::StvMarcarDraw(const void *ip, uint32_t ib, const void 
 	if (activo < 0) activo = StvPropDefRM("debug.stv.idxcheck", 0);
 	if (!activo || !curRenderStep_ || curRenderStep_->commands.empty())
 		return;
-	VkRenderData &d = curRenderStep_->commands.back();
+	VkRenderData &d = curRenderStep_->commands[curRenderStep_->commands.size() - 1];
 	if (d.cmd != VKRRenderCommand::DRAW_INDEXED)
 		return;
 	d.drawIndexed.stvIp = ip; d.drawIndexed.stvIb = ib; d.drawIndexed.stvIs = StvSuma(ip, ib);
