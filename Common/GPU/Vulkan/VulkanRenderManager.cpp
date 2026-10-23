@@ -1004,6 +1004,11 @@ void VulkanRenderManager::StvMarcarDraw(const void *ip, uint32_t ib, const void 
 	d.drawIndexed.stvIp = ip; d.drawIndexed.stvIb = ib; d.drawIndexed.stvIs = StvSuma(ip, ib);
 	// activo 1 = solo indices (barato: no tapa la carrera); 2 = tambien vertices (caro: la tapa, medido 0/25).
 	d.drawIndexed.stvVp = vp; d.drawIndexed.stvVb = vb; d.drawIndexed.stvVs = vp ? StvSuma(vp, vb) : 0;
+	// Control positivo (activo 3): 1 de cada 500 draws se anota con una suma equivocada; el hilo de render TIENE que
+	// reportarlo como CAMBIO. Si no lo reporta, el instrumento esta mudo.
+	static uint32_t stvN = 0;
+	if (activo == 3 && (++stvN % 500) == 0)
+		d.drawIndexed.stvIs ^= 1;
 	// El rango de indices (lectura entera, cara) solo con activo >= 2.
 	const uint16_t *idx = (const uint16_t *)ip;
 	int maxI = -1;
