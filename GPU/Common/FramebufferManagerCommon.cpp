@@ -1267,7 +1267,10 @@ void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, Vir
 	// PPSSPP copiaba el depth de B a A (el mismo que A le habia dado), a pantalla completa con gl_FragDepth.
 	// Valvula debug.stv.cmr.zver (1 por defecto; 0 = copia siempre, como upstream).
 	static int stvZVerModo = -1;
-	if (stvZVerModo < 0) stvZVerModo = StvPropDef("debug.stv.cmr.zver", 1);
+	// STV_ZVERSION_v1: APAGADO por defecto desde 2026-10-23 (f223). Con el, cargar una ranura con el juego andando y
+	// seguir jugando cerraba PPSSPP con "Device lost" (la GPU escribe en una direccion inexistente): 7 de 20 con
+	// tools/.../estres-pausa.sh a x2, 0 de 20 sin el. Ver docs/tareas/device-lost-mali-cmr.md.
+	if (stvZVerModo < 0) stvZVerModo = StvPropDef("debug.stv.cmr.zver", 0);
 	static int stvZSalteadas = 0;
 	const bool stvMismoZ = src->stvZVer != 0 && src->stvZVer == dst->stvZVer && w == src->renderWidth && h == src->renderHeight &&
 		src->renderWidth == dst->renderWidth && src->renderHeight == dst->renderHeight;
@@ -1632,7 +1635,8 @@ bool FramebufferManagerCommon::BindFramebufferAsColorTexture(int stage, VirtualF
 			// desenfoque de lo lejano, corrido 1 pixel) en medio de la escena: era una copia entera por cuadro.
 			// debug.stv.cmr.alternaz=0 vuelve a excluir los framebuffers con depth.
 			static int stvAlternaZ = -1;
-			if (stvAlternaZ < 0) stvAlternaZ = StvPropDef("debug.stv.cmr.alternaz", 1);
+			// STV_ALTERNA_Z_v1: apagado por defecto desde f223 (comparte depth: ver STV_ZVERSION_v1 y el Device lost).
+			if (stvAlternaZ < 0) stvAlternaZ = StvPropDef("debug.stv.cmr.alternaz", 0);
 			const bool stvUsaZ = (framebuffer->usageFlags & FB_USAGE_RENDER_DEPTH) != 0;
 			if (stvAlterna >= 1 && draw_->StvSucioSoportado() && framebuffer->fbo && (layer == 0 || layer == -1) && framebuffer->fbo->Layers() == 1 &&
 				framebuffer->fbo->MultiSampleLevel() == 0 && (!stvUsaZ || stvAlternaZ >= 1)) {
