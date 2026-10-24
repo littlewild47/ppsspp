@@ -72,6 +72,7 @@ struct CompatFlags {
 	bool StvPrimerOpaco;   // STV_DCLOAD_FIJO_v1: el primer draw opaco que cubre el pase evita cargar el color viejo
 	bool StvSinUberFrag;   // STV_SINUBERFRAG_v1: shaders de fragmentos especializados (sin ubershader)
 	bool StvFusionLuz;     // STV_FUSION_LUZ_v1: el multiplicado del cuadro por un buffer de luz se hace en el pase de luz
+	bool StvJitClasico;    // STV_JIT_CLASICO_v1: si se pide el JIT por IR, el juego corre con el JIT clasico
 	bool FramerateHack30;
 	bool JitInvalidationHack;
 	bool HideISOFiles;

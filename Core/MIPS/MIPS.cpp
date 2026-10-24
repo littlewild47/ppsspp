@@ -174,6 +174,23 @@ void MIPSState::Reset() {
 	Init();
 }
 
+// STV_JIT_CLASICO_v1 — juegos que el JIT por IR (CPUCore=3) emula mal. Con la bandera StvJitClasico del compat.ini,
+// un pedido de JIT_IR se cumple con el JIT clasico (CPUCore=1); el IR interprete y el interprete no se tocan, y la
+// config del usuario tampoco (solo cambia el motor creado). Se aplica en los dos lugares que crean el motor (Init, al
+// arrancar, despues de compat.Load; UpdateCore, al aplicar el ini por juego y al volver de los menus con
+// REQUEST_CLEAR_JIT), asi que ningun camino lo devuelve al IR.
+// MEDIDO (Tony Hawk's Project 8, ULES00626, f227, jugada del usuario, ~105 capturas por corrida de 22 s): con el JIT
+// por IR, durante 1-4 cuadros el piso y la pista no se dibujan (cielo o negro): 1-16 cuadros marcados por corrida,
+// tambien en el PPSSPP oficial 1.20.4 con CPUCore=3; con CPUCore=1, 0 en 6 corridas (oficial y STV). Misma velocidad
+// (mediana 59,87 VPS con los dos).
+static CPUCore StvNucleoPermitido(CPUCore pedido) {
+	if (pedido == CPUCore::JIT_IR && PSP_CoreParameter().compat.flags().StvJitClasico) {
+		ERROR_LOG(Log::CPU, "STVJIT: el juego pide el JIT clasico (compat StvJitClasico): JIT_IR -> JIT (STV_JIT_CLASICO_v1)");
+		return CPUCore::JIT;
+	}
+	return pedido;
+}
+
 void MIPSState::Init() {
 	memset(r, 0, sizeof(r));
 	memset(f, 0, sizeof(f));
@@ -209,6 +226,7 @@ void MIPSState::Init() {
 
 	memset(vcmpResult, 0, sizeof(vcmpResult));
 
+	PSP_CoreParameter().cpuCore = StvNucleoPermitido(PSP_CoreParameter().cpuCore);  // STV_JIT_CLASICO_v1
 	std::lock_guard<std::recursive_mutex> guard(MIPSComp::jitLock);
 	if (PSP_CoreParameter().cpuCore == CPUCore::JIT || PSP_CoreParameter().cpuCore == CPUCore::JIT_IR) {
 		MIPSComp::jit = MIPSComp::CreateNativeJit(this, PSP_CoreParameter().cpuCore == CPUCore::JIT_IR);
@@ -224,6 +242,7 @@ bool MIPSState::HasDefaultPrefix() const {
 }
 
 void MIPSState::UpdateCore(CPUCore desired) {
+	desired = StvNucleoPermitido(desired);  // STV_JIT_CLASICO_v1
 	if (PSP_CoreParameter().cpuCore == desired) {
 		return;
 	}

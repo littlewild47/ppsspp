@@ -113,6 +113,7 @@ void Compatibility::CheckSettings(IniFile &iniFile, const std::string &gameID) {
 	CheckSetting(iniFile, gameID, "StvPrimerOpaco", &flags_.StvPrimerOpaco);  // STV_DCLOAD_FIJO_v1
 	CheckSetting(iniFile, gameID, "StvSinUberFrag", &flags_.StvSinUberFrag);  // STV_SINUBERFRAG_v1
 	CheckSetting(iniFile, gameID, "StvFusionLuz", &flags_.StvFusionLuz);  // STV_FUSION_LUZ_v1
+	CheckSetting(iniFile, gameID, "StvJitClasico", &flags_.StvJitClasico);  // STV_JIT_CLASICO_v1
 	CheckSetting(iniFile, gameID, "FramerateHack30", &flags_.FramerateHack30);
 	CheckSetting(iniFile, gameID, "JitInvalidationHack", &flags_.JitInvalidationHack);
 	CheckSetting(iniFile, gameID, "HideISOFiles", &flags_.HideISOFiles);
