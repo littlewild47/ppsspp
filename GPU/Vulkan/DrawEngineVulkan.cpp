@@ -1050,7 +1050,6 @@ void DrawEngineVulkan::Flush() {
 		uint32_t vbOffset;
 
 		VkBuffer vbuf = VK_NULL_HANDLE;
-		const u8 *stvVp = nullptr; uint32_t stvVb = 0;  // STV_IDXCHECK_v1
 		const int stvSomTipo = StvSomClasificarHW();  // STV_SOMBRA_RECORTE_v1: 1 silueta, 2 proyeccion (necesitan posiciones en CPU)
 		if ((applySkinInDecode_ && (lastVType_ & GE_VTYPE_WEIGHT_MASK)) || stvSomTipo != 0) {
 			// If software skinning, we're predecoding into "decoded". So make sure we're done, then push that content.
@@ -1058,14 +1057,12 @@ void DrawEngineVulkan::Flush() {
 			VkDeviceSize size = numDecodedVerts_ * dec_->GetDecVtxFmt().stride;
 			u8 *dest = (u8 *)pushVertex_->Allocate(size, 4, &vbuf, &vbOffset);
 			memcpy(dest, decoded_, size);
-			stvVp = dest; stvVb = (uint32_t)size;  // STV_IDXCHECK_v1
 		} else {
 			// Figure out how much pushbuffer space we need to allocate.
 			int vertsToDecode = ComputeNumVertsToDecode();
 			// Decode directly into the pushbuffer
 			u8 *dest = pushVertex_->Allocate(vertsToDecode * dec_->GetDecVtxFmt().stride, 4, &vbuf, &vbOffset);
 			DecodeVerts(dec_, dest);
-			stvVp = dest; stvVb = (uint32_t)(vertsToDecode * dec_->GetDecVtxFmt().stride);  // STV_IDXCHECK_v1
 		}
 
 		int vertexCount;
@@ -1195,10 +1192,7 @@ void DrawEngineVulkan::Flush() {
 		};
 		if (useElements) {
 			VkBuffer ibuf;
-			u32 ibOffset;  // STV_IDXCHECK_v1: Allocate en vez de Push para tener el puntero de CPU
-			u8 *stvIp = pushIndex_->Allocate(sizeof(uint16_t) * vertexCount, 4, &ibuf, &ibOffset);
-			memcpy(stvIp, decIndex_, sizeof(uint16_t) * vertexCount);
-			const int stvNv = stvVb ? (int)(stvVb / dec_->GetDecVtxFmt().stride) : 0;
+			u32 ibOffset = (uint32_t)pushIndex_->Push(decIndex_, sizeof(uint16_t) * vertexCount, 4, &ibuf);
 			StvDescribirPrimerDraw(renderManager, (int)prim, vertexCount, true);
 			if (!StvFsBits(stvUltimoFs, pipelineState_.blendState.blendEnabled) && !StvClasif(vertexCount, pipelineKey_, (int)prim) && !StvDrawInfo(vertexCount, pipelineKey_, (int)prim) && !stvSomSaltar) {
 				if (!stvSubs.empty()) {
@@ -1210,12 +1204,10 @@ void DrawEngineVulkan::Flush() {
 						renderManager->SetScissor(x1, y1, x2 - x1, y2 - y1);
 						StvSombra::St().areaRecorte2 += (double)(x2 - x1) * (y2 - y1);
 						renderManager->DrawIndexed(descSetIndex, ARRAY_SIZE(dynamicUBOOffsets), dynamicUBOOffsets, vbuf, vbOffset, ibuf, ibOffset + q.primero * sizeof(uint16_t), q.cuenta, 1);
-						renderManager->StvMarcarDraw(stvIp + q.primero * sizeof(uint16_t), q.cuenta * sizeof(uint16_t), stvVp, stvVb, stvNv);
 					}
 					gstate_c.Dirty(DIRTY_VIEWPORTSCISSOR_STATE);
 				} else {
 					renderManager->DrawIndexed(descSetIndex, ARRAY_SIZE(dynamicUBOOffsets), dynamicUBOOffsets, vbuf, vbOffset, ibuf, ibOffset, vertexCount, 1);
-					renderManager->StvMarcarDraw(stvIp, vertexCount * sizeof(uint16_t), stvVp, stvVb, stvNv);
 				}
 			}
 		} else {
@@ -1418,11 +1410,8 @@ void DrawEngineVulkan::Flush() {
 			PROFILE_THIS_SCOPE("renderman_q");
 
 			VkBuffer vbuf, ibuf;
-			u32 vbOffset, ibOffset;  // STV_IDXCHECK_v1: Allocate en vez de Push para tener los punteros de CPU
-			u8 *stvVp = pushVertex_->Allocate(numDecodedVerts_ * sizeof(TransformedVertex), 4, &vbuf, &vbOffset);
-			memcpy(stvVp, result.drawBuffer, numDecodedVerts_ * sizeof(TransformedVertex));
-			u8 *stvIp = pushIndex_->Allocate(sizeof(short) * result.drawNumTrans, 4, &ibuf, &ibOffset);
-			memcpy(stvIp, inds, sizeof(short) * result.drawNumTrans);
+			u32 vbOffset = (uint32_t)pushVertex_->Push(result.drawBuffer, numDecodedVerts_ * sizeof(TransformedVertex), 4, &vbuf);
+			u32 ibOffset = (uint32_t)pushIndex_->Push(inds, sizeof(short) * result.drawNumTrans, 4, &ibuf);
 			// STV: describir el primer draw del paso y, si es opaco y cubre su caja,
 			// avisar al runner (con la caja en pixeles del render target). DESPUES de
 			// aplicar la textura: eso puede copiar y re-abrir el pase.
@@ -1483,7 +1472,6 @@ void DrawEngineVulkan::Flush() {
 			stvDiTV = nullptr; stvDiTVn = 0;
 			if (!stvSaltear)
 			renderManager->DrawIndexed(descSetIndex, ARRAY_SIZE(dynamicUBOOffsets), dynamicUBOOffsets, vbuf, vbOffset, ibuf, ibOffset, result.drawNumTrans, 1);
-			renderManager->StvMarcarDraw(stvIp, sizeof(short) * result.drawNumTrans, stvVp, numDecodedVerts_ * sizeof(TransformedVertex), numDecodedVerts_);
 		} else if (result.action == SW_CLEAR) {
 			// Note: we won't get here if the clear is alpha but not color, or color but not alpha.
 			bool clearColor = gstate.isClearModeColorMask();

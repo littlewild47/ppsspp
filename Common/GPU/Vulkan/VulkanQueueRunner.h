@@ -80,10 +80,6 @@ struct VkRenderData {
 			uint32_t voffset;
 			uint32_t ioffset;
 			uint32_t count;
-			// STV_IDXCHECK_v1 (instrumento, debug.stv.idxcheck=1): datos en el push buffer al grabar y su suma.
-			const void *stvIp;
-			const void *stvVp;
-			uint32_t stvIb, stvVb, stvIs, stvVs;
 		} drawIndexed;
 		struct {
 			uint32_t clearColor;

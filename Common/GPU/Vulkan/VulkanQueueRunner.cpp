@@ -1341,15 +1341,6 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 				_dbg_assert_(set != VK_NULL_HANDLE);
 				vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &set, c.drawIndexed.numUboOffsets, c.drawIndexed.uboOffsets);
 				vkCmdBindIndexBuffer(cmd, c.drawIndexed.ibuffer, c.drawIndexed.ioffset, VK_INDEX_TYPE_UINT16);
-				if (c.drawIndexed.stvIp) {  // STV_IDXCHECK_v1: los datos que la GPU va a leer, igual que al grabar?
-					const uint32_t si = VulkanRenderManager::StvSuma(c.drawIndexed.stvIp, c.drawIndexed.stvIb);
-					const uint32_t sv = c.drawIndexed.stvVp ? VulkanRenderManager::StvSuma(c.drawIndexed.stvVp, c.drawIndexed.stvVb) : 0;
-					static int avisos = 0;
-					if ((si != c.drawIndexed.stvIs || sv != c.drawIndexed.stvVs) && avisos++ < 40)
-						STV_LOG("STVIDX: CAMBIO entre grabar y ejecutar: indices %s, vertices %s (count %u, %u B idx, %u B vtx, paso %s)",
-							si != c.drawIndexed.stvIs ? "CAMBIARON" : "iguales", sv != c.drawIndexed.stvVs ? "CAMBIARON" : "iguales",
-							c.drawIndexed.count, c.drawIndexed.stvIb, c.drawIndexed.stvVb, step.render.framebuffer ? step.render.framebuffer->Tag() : "backbuffer");
-				}
 				VkDeviceSize voffset = c.drawIndexed.voffset;
 				vkCmdBindVertexBuffers(cmd, 0, 1, &c.drawIndexed.vbuffer, &voffset);
 				if (!StvSaltearDraw(step, lastGraphicsPipeline, c.drawIndexed.count))

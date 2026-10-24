@@ -16,13 +16,6 @@
 #include <android/log.h>
 #endif
 #include "Common/StvMedidor.h"  // STV_MEDIDOR_ESPERAS_v1
-static int StvPropDefRM(const char *n, int def) {  // STV_IDXCHECK_v1
-#ifdef __ANDROID__
-	char v[PROP_VALUE_MAX] = {0};
-	if (__system_property_get(n, v) > 0 && v[0]) return atoi(v);
-#endif
-	return def;
-}
 
 #include "Common/LogReporting.h"
 #include "Common/Thread/ThreadUtil.h"
@@ -991,33 +984,6 @@ VKRGraphicsPipeline *VulkanRenderManager::CreateGraphicsPipeline(VKRGraphicsPipe
 			compileCond_.notify_one();
 	}
 	return pipeline;
-}
-
-void VulkanRenderManager::StvMarcarDraw(const void *ip, uint32_t ib, const void *vp, uint32_t vb, int nverts) {  // STV_IDXCHECK_v1
-	static int activo = -1;
-	if (activo < 0) activo = StvPropDefRM("debug.stv.idxcheck", 0);
-	if (!activo || !curRenderStep_ || curRenderStep_->commands.empty())
-		return;
-	VkRenderData &d = curRenderStep_->commands[curRenderStep_->commands.size() - 1];
-	if (d.cmd != VKRRenderCommand::DRAW_INDEXED)
-		return;
-	d.drawIndexed.stvIp = ip; d.drawIndexed.stvIb = ib; d.drawIndexed.stvIs = StvSuma(ip, ib);
-	// activo 1 = solo indices (barato: no tapa la carrera); 2 = tambien vertices (caro: la tapa, medido 0/25).
-	d.drawIndexed.stvVp = vp; d.drawIndexed.stvVb = vb; d.drawIndexed.stvVs = vp ? StvSuma(vp, vb) : 0;
-	// Control positivo (activo 3): 1 de cada 500 draws se anota con una suma equivocada; el hilo de render TIENE que
-	// reportarlo como CAMBIO. Si no lo reporta, el instrumento esta mudo.
-	static uint32_t stvN = 0;
-	if (activo == 3 && (++stvN % 500) == 0)
-		d.drawIndexed.stvIs ^= 1;
-	// El rango de indices (lectura entera, cara) solo con activo >= 2.
-	const uint16_t *idx = (const uint16_t *)ip;
-	int maxI = -1;
-	if (activo >= 2)
-		for (uint32_t i = 0; i < ib / 2; i++) if (idx[i] > maxI) maxI = idx[i];
-	static int avisos = 0;
-	if (nverts > 0 && maxI >= nverts && avisos++ < 30)
-		__android_log_print(ANDROID_LOG_ERROR, "STV", "STVIDX: RANGO indice max %d >= %d vertices (count %u, paso %s)", maxI, nverts, d.drawIndexed.count,
-			curRenderStep_->render.framebuffer ? curRenderStep_->render.framebuffer->Tag() : "backbuffer");
 }
 
 bool VulkanRenderManager::StvVolverAlPaso(VKRFramebuffer *anterior, VKRFramebuffer *actual) {
