@@ -538,6 +538,11 @@ void Barrera(stvmed::Ranura ranura = stvmed::R_BARRERA_OTRA);
 // el estado final. Contabiliza las esperas reales en el testigo.
 void EsperarGeParaSync();
 
+// STV_GE_OCIO_v1: lo llama CoreTiming::Idle ANTES de adelantar el reloj
+// emulado. Con una pasada del worker en vuelo, la espera y drena, para que el
+// ocio no salte por encima de una terminacion que inline ya estaria agendada.
+void EsperarAntesDeOcio();
+
 // El dispatch unico que reemplaza a los gpu->ProcessDLQueue() de sceGe.cpp:
 // nivel 0 -> inline exacto; nivel 1 -> postear + esperar + drenar; nivel 2 ->
 // postear y volver. Si el GPU exige inline (debugger/recorder/dump), degrada a

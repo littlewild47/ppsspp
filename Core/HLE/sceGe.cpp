@@ -415,6 +415,19 @@ bool __GeTriggerInterrupt(int listid, u32 pc, u64 atTicks) {
 	return true;
 }
 
+// STV_GE_OCIO_v1: hay algun hilo emulado dormido en sceGeDrawSync/sceGeListSync
+// esperando una terminacion. Solo EmuThread (las listas las tocan el wait y
+// __GeTriggerSync, que en modo worker se drena en el EmuThread).
+bool __GeHayHilosEsperando() {
+	if (!drawWaitingThreads.empty())
+		return true;
+	for (const auto &kv : listWaitingThreads) {
+		if (!kv.second.empty())
+			return true;
+	}
+	return false;
+}
+
 void __GeWaitCurrentThread(GPUSyncType type, SceUID waitId, const char *reason) {
 	WaitType waitType;
 	if (type == GPU_SYNC_DRAW) {

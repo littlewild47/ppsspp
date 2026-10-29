@@ -558,6 +558,62 @@ static int ResolverCederCmd() {
 	return 1;
 }
 
+// --- STV_GE_OCIO_v1 (arco outrun-fps, 2026-10-28) -----------------------------
+//
+// EL BUG QUE CIERRA. Con el worker asincrono (nivel 2) la syscall postea la
+// lista y vuelve; si el juego se queda esperando al GE (callback de fin, un
+// semaforo, un DrawSync de otro hilo...), todos sus hilos quedan dormidos y el
+// kernel HLE entra en __KernelIdle -> CoreTiming::Idle, que ADELANTA el reloj
+// emulado hasta el proximo evento agendado. Pero la terminacion de la lista
+// todavia no esta agendada: la tiene el worker, que sigue en su pasada. El
+// reloj salta hasta el vblank, la terminacion se drena despues con su tick ya
+// vencido, y el juego, que en una PSP (o inline) habria cerrado el cuadro a
+// tiempo, pierde el vblank: 100 % de velocidad (VPS 60) con 30 cuadros.
+// Medido en OutRun 2006 (ULES00262), misma escena, conmutando en caliente:
+// debug.stv.ge 0 -> 60 presentados; 2 -> 29-31.
+//
+// LA CURA. Antes de dejar correr el reloj por ocio, si el worker tiene una
+// pasada en vuelo (o una orden sin atender) Y algun hilo emulado duerme en
+// sceGeDrawSync/sceGeListSync (en OutRun: user_main en GeListSync, medido con
+// un volcado de los hilos en espera), esperarla y drenar: las
+// terminaciones quedan agendadas en su tick y Idle avanza solo hasta ellas,
+// exactamente como inline. Si nadie espera al GE no se toca nada: el reloj
+// corre en paralelo con el worker, que es su ganancia (ver EsperarAntesDeOcio).
+//
+// Y SOLO CON HOLGURA. Esperar al worker es gratis cuando el emulador va a
+// velocidad plena (le sobra tiempo real hasta el vblank: OutRun a 60 VPS),
+// pero cuesta cuando va atrasado: Midnight Club 3 (ULES00108, 62 %) espera al
+// GE en ListSync y con la espera caia de 36,6-40,4 a 35,9 VPS (4 de 4). Por
+// eso en modo automatico se mide el ritmo de vblanks cada 32 y la espera se
+// arma con >= 59 VPS y se desarma bajo 57 (y no se rearma por ~10 s).
+// Valvula: setprop debug.stv.ge.ocio 0 = nunca, 1 = automatico (defecto),
+// 2 = siempre (para pruebas).
+static int g_ocio = 1;
+static bool g_ocioHolgura = false;     // modo 1: hay holgura y la espera esta armada
+static int g_ocioEnfriar = 0;          // revisiones que faltan para poder rearmar
+static double g_ocioVps = 0.0;         // ultimo ritmo medido (testigo)
+static uint64_t g_ocioArmadas = 0, g_ocioDesarmadas = 0;
+static std::chrono::steady_clock::time_point g_ocioT0{};
+inline constexpr double kOcioArmar = 59.0;
+inline constexpr double kOcioDesarmar = 57.0;
+inline constexpr int kOcioEnfriar = 20;  // 20 * 32 vblanks ~ 10,7 s
+static int g_ocioRevision = 0;
+static uint32_t g_ocioAnuncio = 0;
+static std::atomic<uint64_t> g_ocioLlamadas{0};   // Idle con el worker activo
+static std::atomic<uint64_t> g_ocioEsperas{0};    // ...con un hilo en Draw/ListSync y pasada en vuelo: se espera
+static std::atomic<uint64_t> g_ocioSaltadas{0};   // ...sin ningun hilo esperando al GE: no se mira ni el candado
+
+static int ResolverOcio() {
+	const char *e = getenv("STV_GE_OCIO");
+	if (e && *e) return (*e >= '0' && *e <= '2') ? *e - '0' : 1;
+#if defined(__ANDROID__)
+	char prop[PROP_VALUE_MAX] = { 0 };
+	if (__system_property_get("debug.stv.ge.ocio", prop) > 0 && prop[0])
+		return (prop[0] >= '0' && prop[0] <= '2') ? prop[0] - '0' : 1;
+#endif
+	return 1;
+}
+
 bool StallLibreActivo() {
 	static int v = -1;
 	if (v < 0) {
@@ -851,6 +907,36 @@ void EsperarGeParaSync() {
 	Drenar();
 }
 
+// STV_GE_OCIO_v1: ver el encabezado de g_ocio. Solo EmuThread (drena).
+void EsperarAntesDeOcio() {
+	if (NivelActivo() == 0 || g_ocio == 0 || (g_ocio == 1 && !g_ocioHolgura))
+		return;
+	g_ocioLlamadas.fetch_add(1, std::memory_order_relaxed);
+	// Solo si el juego esta ESPERANDO al GE (un hilo dormido en DrawSync o
+	// ListSync). Si duerme por otra cosa (vblank, audio, IO, un semaforo), que
+	// el reloj corra mientras el worker termina es justo el solapamiento que
+	// paga el worker (Spider-Man 3: 44 -> 46-48 VPS); esperar ahi lo borraba.
+	// Va PRIMERO y sin candado (listas del EmuThread): un juego que nunca
+	// espera al GE no toca g_muCola en ningun ocio.
+	if (!__GeHayHilosEsperando()) {
+		g_ocioSaltadas.fetch_add(1, std::memory_order_relaxed);
+		return;
+	}
+	if (!g_workerCreado.load(std::memory_order_relaxed))
+		return;
+	bool enVuelo;
+	{
+		RastreoCandado rastroCola(kCandCola, "g_muCola");
+		std::lock_guard<std::mutex> lk(g_muCola);
+		enVuelo = g_corriendo || g_ordenPendiente;
+	}
+	if (!enVuelo)
+		return;
+	g_ocioEsperas.fetch_add(1, std::memory_order_relaxed);
+	EsperarIdleInterno(false, stvmed::R_GE_SYNC);
+	Drenar();
+}
+
 // --- El dispatch -------------------------------------------------------------
 
 void DespacharProcessDLQueue() {
@@ -934,6 +1020,43 @@ void PorVblank() {
 	// Releida cada vblank (a diferencia del contador de epi: aca la llamada ya
 	// es 1/cuadro, la prop cuesta ~nada y el A/B conmuta al toque).
 	const uint32_t vb = g_vblanksDeJuego.fetch_add(1, std::memory_order_relaxed) + 1;
+	if (++g_ocioRevision >= kInvalFramesRevision) {
+		g_ocioRevision = 0;
+		const int antes = g_ocio;
+		g_ocio = ResolverOcio();
+		// La holgura: ritmo de vblanks de pared en estas 32. Una pausa (menu)
+		// da un ritmo bajisimo y desarma, que es lo prudente.
+		const auto ahora = std::chrono::steady_clock::now();
+		if (g_ocioT0.time_since_epoch().count() != 0) {
+			const double dt = std::chrono::duration<double>(ahora - g_ocioT0).count();
+			g_ocioVps = dt > 0.0 ? kInvalFramesRevision / dt : 0.0;
+			if (g_ocioEnfriar > 0)
+				g_ocioEnfriar--;
+			if (g_ocioHolgura && g_ocioVps < kOcioDesarmar) {
+				g_ocioHolgura = false;
+				g_ocioEnfriar = kOcioEnfriar;
+				g_ocioDesarmadas++;
+			} else if (!g_ocioHolgura && g_ocioEnfriar == 0 && g_ocioVps >= kOcioArmar) {
+				g_ocioHolgura = true;
+				g_ocioArmadas++;
+			}
+		}
+		g_ocioT0 = ahora;
+		// Testigo en los DOS estados: si ninguna linea "STV: ocio" aparece, la
+		// lib no lleva el parche (distinto de "la valvula esta en 0").
+		if (g_ocio != antes || ++g_ocioAnuncio >= kInvalAnuncioCada) {
+			g_ocioAnuncio = 0;
+			char b[224];
+			snprintf(b, sizeof(b), "STV: ocio %s holgura=%d vps=%.1f armadas=%llu desarmadas=%llu (debug.stv.ge.ocio) llamadas=%llu esperas=%llu saltadas=%llu (STV_GE_OCIO_v1)",
+				g_ocio == 0 ? "apagado" : (g_ocio == 2 ? "SIEMPRE" : "AUTO"),
+				g_ocioHolgura ? 1 : 0, g_ocioVps,
+				(unsigned long long)g_ocioArmadas, (unsigned long long)g_ocioDesarmadas,
+				(unsigned long long)g_ocioLlamadas.load(std::memory_order_relaxed),
+				(unsigned long long)g_ocioEsperas.load(std::memory_order_relaxed),
+				(unsigned long long)g_ocioSaltadas.load(std::memory_order_relaxed));
+			Emitir(b);
+		}
+	}
 	if (++g_cederCmdRevision >= kInvalFramesRevision) {
 		g_cederCmdRevision = 0;
 		const int antes = g_cederCmd;

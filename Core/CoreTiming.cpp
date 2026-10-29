@@ -436,6 +436,10 @@ void LogPendingEvents() {
 }
 
 void Idle(int maxIdle) {
+	// STV_GE_OCIO_v1: no adelantar el reloj por encima de una lista que el
+	// hilo del GE todavia esta procesando (ver StvGeThread.cpp, g_ocio).
+	stvge::EsperarAntesDeOcio();
+
 	int cyclesDown = currentMIPS->downcount;
 	if (maxIdle != 0 && cyclesDown > maxIdle)
 		cyclesDown = maxIdle;

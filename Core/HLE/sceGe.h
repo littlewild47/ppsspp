@@ -53,6 +53,7 @@ void __GeShutdown();
 bool __GeTriggerSync(GPUSyncType waitType, int id, u64 atTicks);
 bool __GeTriggerInterrupt(int listid, u32 pc, u64 atTicks);
 void __GeWaitCurrentThread(GPUSyncType type, SceUID waitId, const char *reason);
+bool __GeHayHilosEsperando();  // STV_GE_OCIO_v1
 bool __GeTriggerWait(GPUSyncType type, SceUID waitId);
 
 // Export functions for use by Util/PPGe
