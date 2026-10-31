@@ -160,7 +160,7 @@ void DeveloperToolsScreen::CreateGeneralTab(UI::LinearLayout *list) {
 	list->Add(new Choice(dev->T("JIT debug tools")))->OnClick.Handle(this, &DeveloperToolsScreen::OnJitDebugTools);
 	list->Add(new CheckBox(&g_Config.bShowDeveloperMenu, dev->T("Show in-game developer menu")));
 	// STV_GRABADORA_v1
-	list->Add(new CheckBox(&g_Config.bStvGrabadora, "Grabar y reproducir jugadas en el menú de pausa (STV)"));
+	list->Add(new CheckBox(&g_Config.bStvGrabadora, dev->T("Record and replay inputs from the pause menu (STV)")));
 
 	AddOverlayList(list, screenManager());
 

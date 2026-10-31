@@ -685,23 +685,23 @@ void GamePauseScreen::CreateViews() {
 		const int ranura = g_Config.iCurrentStateSlot;
 		const int estado = StvGrabadoraEstado();
 		if (estado == 1) {
-			rightColumnItems->Add(new Choice("Detener y guardar la grabación", ImageID("I_FILE_SAVE")))->OnClick.Add([this](UI::EventParams &) {
+			rightColumnItems->Add(new Choice(pa->T("Stop and save the recording"), ImageID("I_FILE_SAVE")))->OnClick.Add([this](UI::EventParams &) {
 				StvGrabadoraDetener();
 				RecreateViews();
 			});
 		} else if (estado == 2) {
-			rightColumnItems->Add(new Choice("Detener la reproducción", ImageID("I_PAUSE_LINE")))->OnClick.Add([this](UI::EventParams &) {
+			rightColumnItems->Add(new Choice(pa->T("Stop playback"), ImageID("I_PAUSE_LINE")))->OnClick.Add([this](UI::EventParams &) {
 				StvGrabadoraDetener();
 				RecreateViews();
 			});
 		} else {
-			Choice *grabar = rightColumnItems->Add(new Choice(StringFromFormat("Grabar jugada desde la ranura %d", ranura + 1), ImageID("I_FILE_SAVE")));
+			Choice *grabar = rightColumnItems->Add(new Choice(ApplySafeSubstitutions(pa->T("Record a play from slot %1"), ranura + 1), ImageID("I_FILE_SAVE")));
 			grabar->SetEnabled(SaveState::HasSaveInSlot(saveStatePrefix_, ranura));
 			grabar->OnClick.Add([this, ranura](UI::EventParams &) {
 				StvGrabadoraGrabar(saveStatePrefix_, ranura);
 				TriggerFinish(DR_CANCEL);
 			});
-			Choice *repro = rightColumnItems->Add(new Choice(StringFromFormat("Reproducir jugada de la ranura %d", ranura + 1), ImageID("I_PLAY")));
+			Choice *repro = rightColumnItems->Add(new Choice(ApplySafeSubstitutions(pa->T("Replay the play from slot %1"), ranura + 1), ImageID("I_PLAY")));
 			repro->SetEnabled(SaveState::HasSaveInSlot(saveStatePrefix_, ranura) && File::Exists(StvGrabadoraRuta(saveStatePrefix_, ranura)));
 			repro->OnClick.Add([this, ranura](UI::EventParams &) {
 				StvGrabadoraReproducir(saveStatePrefix_, ranura);

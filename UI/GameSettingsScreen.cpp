@@ -380,7 +380,7 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 	// STV F6: el worker del GE, on/off para el usuario (PER_GAME). Conmutable
 	// en caliente: PorVblank relee la config cada cuadro y cambia en frontera
 	// segura. La prop debug.stv.ge del banco lo pisa cuando esta seteada.
-	graphicsSettings->Add(new CheckBox(&g_Config.bStvWorkerGE, "Hilo del GE en otro nucleo (STV)"));
+	graphicsSettings->Add(new CheckBox(&g_Config.bStvWorkerGE, gr->T("GE thread on another core (STV)")));
 
 
 	int deviceType = System_GetPropertyInt(SYSPROP_DEVICE_TYPE);
@@ -872,8 +872,8 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		screenManager()->push(new AnalogCalibrationScreen(gamePath_));
 	});
 	// STV_CONTROLES_v1
-	controlsSettings->Add(new CheckBox(&g_Config.bStvControlesGlobales, "Un mapeo para todos los juegos (STV)"));
-	controlsSettings->Add(new CheckBox(&g_Config.bStvMenuFijo, "Menus: A acepta, B vuelve (STV)"))->OnClick.Add([](UI::EventParams &e) {
+	controlsSettings->Add(new CheckBox(&g_Config.bStvControlesGlobales, co->T("One mapping for all games (STV)")));
+	controlsSettings->Add(new CheckBox(&g_Config.bStvMenuFijo, co->T("Menus: A accepts, B goes back (STV)")))->OnClick.Add([](UI::EventParams &e) {
 		KeyMap::UpdateNativeMenuKeys();
 	});
 
